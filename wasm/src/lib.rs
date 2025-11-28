@@ -8,9 +8,6 @@ use crate::shape::Boundary;
 use wasm_bindgen::prelude::*;
 use web_sys::WebGl2RenderingContext;
 
-#[cfg(feature = "console_error_panic_hook")]
-use console_error_panic_hook;
-
 /// Initialize panic hook for better error messages in browser console
 #[wasm_bindgen]
 pub fn init_panic_hook() {
@@ -20,6 +17,7 @@ pub fn init_panic_hook() {
 
 /// Main Gerber processor with stateful WebGL renderer
 #[wasm_bindgen]
+#[derive(Default)]
 pub struct GerberProcessor {
     gl: Option<WebGl2RenderingContext>,
     renderer: Option<Renderer>,
@@ -31,11 +29,7 @@ impl GerberProcessor {
     /// Create a new GerberProcessor instance
     #[wasm_bindgen(constructor)]
     pub fn new() -> GerberProcessor {
-        GerberProcessor {
-            gl: None,
-            renderer: None,
-            next_layer_id: 0,
-        }
+        GerberProcessor::default()
     }
 
     /// Initialize with WebGL 2.0 context

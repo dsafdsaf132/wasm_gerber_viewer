@@ -275,7 +275,7 @@ fn apply_multiplication_division(
     let mut i = 0;
 
     while i < tokens.len() {
-        if i + 2 < tokens.len() && ("*".to_string() == tokens[i + 1] || "/" == tokens[i + 1]) {
+        if i + 2 < tokens.len() && ("*" == tokens[i + 1] || "/" == tokens[i + 1]) {
             let left = token_to_value(&tokens[i], variables)?;
             let op = &tokens[i + 1];
             let right = token_to_value(&tokens[i + 2], variables)?;
@@ -878,12 +878,10 @@ fn apply_boolean_operations_v2(shapes: &[(Vec<Vec<[f32; 2]>>, f32)]) -> Vec<Prim
     let mut result_shapes: Vec<Vec<Vec<[f32; 2]>>> = vec![shapes[first_idx].0.clone()];
 
     // Apply boolean operations sequentially
-    for i in 0..shapes.len() {
+    for (i, (shape, exposure)) in shapes.iter().enumerate() {
         if i == first_idx {
             continue; // Skip the first shape we already added
         }
-
-        let (shape, exposure) = &shapes[i];
 
         if *exposure > 0.5 {
             // Positive: UNION
@@ -1511,8 +1509,8 @@ impl ApertureMacro {
                     7 => {
                         // Thermal: centerX, centerY, outerDiameter, innerDiameter, gapThickness, [rotation]
                         if parts.len() >= 6 {
-                            for i in 1..=5 {
-                                if let Ok(val) = evaluate_expression(parts[i], &variables) {
+                            for part in &parts[1..=5] {
+                                if let Ok(val) = evaluate_expression(part, &variables) {
                                     params_list.push(val);
                                 }
                             }
@@ -1526,8 +1524,8 @@ impl ApertureMacro {
                     20 => {
                         // Vector Line: exposure, width, startX, startY, endX, endY, [rotation]
                         if parts.len() >= 7 {
-                            for i in 2..=6 {
-                                if let Ok(val) = evaluate_expression(parts[i], &variables) {
+                            for part in &parts[2..=6] {
+                                if let Ok(val) = evaluate_expression(part, &variables) {
                                     params_list.push(val);
                                 }
                             }
@@ -1536,8 +1534,8 @@ impl ApertureMacro {
                     21 => {
                         // Center Line: exposure, width, height, centerX, centerY, [rotation]
                         if parts.len() >= 6 {
-                            for i in 2..=5 {
-                                if let Ok(val) = evaluate_expression(parts[i], &variables) {
+                            for part in &parts[2..=5] {
+                                if let Ok(val) = evaluate_expression(part, &variables) {
                                     params_list.push(val);
                                 }
                             }
@@ -2391,8 +2389,50 @@ fn execute_interpolation(
 
                 // Create Arc primitive
                 if let Some(aperture) = apertures.get(&state.current_aperture) {
-                    let center_x = start_x + i;
-                    let center_y = start_y + j;
+                    // Find the correct arc center
+                    let (center_x, center_y) = if state.quadrant_mode == "single" {
+                        // Single-quadrant mode: find correct center from 4 candidates (±I, ±J)
+                        let candidates = [
+                            (start_x + i, start_y + j),
+                            (start_x - i, start_y + j),
+                            (start_x + i, start_y - j),
+                            (start_x - i, start_y - j),
+                        ];
+
+                        let mut selected = candidates[0];
+                        let is_clockwise = state.interpolation_mode == "clockwise";
+
+                        for &candidate in &candidates {
+                            let cx = candidate.0;
+                            let cy = candidate.1;
+                            let r1 = ((cx - start_x).powi(2) + (cy - start_y).powi(2)).sqrt();
+                            let r2 = ((cx - end_x).powi(2) + (cy - end_y).powi(2)).sqrt();
+
+                            // Check if radii are consistent
+                            if (r1 - r2).abs() < 0.001 {
+                                let sa = (start_y - cy).atan2(start_x - cx);
+                                let ea = (end_y - cy).atan2(end_x - cx);
+                                let mut sweep = ea - sa;
+
+                                if is_clockwise && sweep > 0.0 {
+                                    sweep -= 2.0 * std::f32::consts::PI;
+                                } else if !is_clockwise && sweep < 0.0 {
+                                    sweep += 2.0 * std::f32::consts::PI;
+                                }
+
+                                // Check if sweep angle <= 90 degrees
+                                if sweep.abs() <= std::f32::consts::PI / 2.0 + 0.001 {
+                                    selected = candidate;
+                                    break;
+                                }
+                            }
+                        }
+                        selected
+                    } else {
+                        // Multi-quadrant mode: center is directly specified
+                        (start_x + i, start_y + j)
+                    };
+
                     let radius =
                         ((start_x - center_x).powi(2) + (start_y - center_y).powi(2)).sqrt();
                     let start_angle = (start_y - center_y).atan2(start_x - center_x);
@@ -2408,6 +2448,15 @@ fn execute_interpolation(
                         sweep_angle -= 2.0 * std::f32::consts::PI;
                     } else if !is_clockwise && sweep_angle < 0.0 {
                         sweep_angle += 2.0 * std::f32::consts::PI;
+                    }
+
+                    // Clamp single-quadrant sweep angle to ±90 degrees
+                    if state.quadrant_mode == "single" && sweep_angle.abs() > std::f32::consts::PI / 2.0 + 0.001 {
+                        if is_clockwise {
+                            sweep_angle = -std::f32::consts::PI / 2.0;
+                        } else {
+                            sweep_angle = std::f32::consts::PI / 2.0;
+                        }
                     }
 
                     // Add Arc primitive
@@ -2447,8 +2496,8 @@ fn parse_macro(data: &str, macros: &mut HashMap<String, ApertureMacro>) {
     let mut macro_def = ApertureMacro::new(name);
 
     // Parse statements (parts[1] to parts[n-1], last part might be empty)
-    for i in 1..parts.len() {
-        let stmt = parts[i].trim();
+    for part in &parts[1..] {
+        let stmt = part.trim();
         if stmt.is_empty() {
             continue;
         }
@@ -2521,7 +2570,7 @@ fn parse_aperture(
     let rest = &content[code_end..];
 
     // Split shape and parameters by comma or *
-    let shape_and_params: Vec<&str> = rest.split(|c: char| c == ',' || c == '*').collect();
+    let shape_and_params: Vec<&str> = rest.split([',', '*']).collect();
     if shape_and_params.is_empty() {
         return;
     }
@@ -2714,8 +2763,8 @@ fn parse_aperture(
             if let Some(macro_def) = macros.get(&shape) {
                 // Collect parameters - also handle parameters separated by X
                 let mut params = Vec::new();
-                for i in 1..shape_and_params.len() {
-                    let param_str = shape_and_params[i].trim();
+                for param_str in shape_and_params.iter().skip(1) {
+                    let param_str = param_str.trim();
                     if param_str.is_empty() {
                         continue;
                     }
@@ -2728,11 +2777,9 @@ fn parse_aperture(
                                 params.push(param * unit_multiplier);
                             }
                         }
-                    } else {
-                        if let Ok(param) = param_str.parse::<f32>() {
-                            // Convert dimension parameters (aperture macro params are dimensions)
-                            params.push(param * unit_multiplier);
-                        }
+                    } else if let Ok(param) = param_str.parse::<f32>() {
+                        // Convert dimension parameters (aperture macro params are dimensions)
+                        params.push(param * unit_multiplier);
                     }
                 }
 
