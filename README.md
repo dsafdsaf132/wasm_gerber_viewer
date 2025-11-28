@@ -1,4 +1,4 @@
-# Gerber Viewer
+# WASM Gerber Viewer
 
 WASM/WebGL2-based Gerber file viewer for PCB visualization.
 
