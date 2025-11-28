@@ -1,0 +1,235 @@
+mod parser;
+mod renderer;
+mod shape;
+
+use crate::parser::parse_gerber;
+use crate::renderer::Renderer;
+use crate::shape::Boundary;
+use wasm_bindgen::prelude::*;
+use web_sys::WebGl2RenderingContext;
+
+#[cfg(feature = "console_error_panic_hook")]
+use console_error_panic_hook;
+
+/// Initialize panic hook for better error messages in browser console
+#[wasm_bindgen]
+pub fn init_panic_hook() {
+    #[cfg(feature = "console_error_panic_hook")]
+    console_error_panic_hook::set_once();
+}
+
+/// Main Gerber processor with stateful WebGL renderer
+#[wasm_bindgen]
+pub struct GerberProcessor {
+    gl: Option<WebGl2RenderingContext>,
+    renderer: Option<Renderer>,
+    next_layer_id: u32,  // Layer ID generator
+}
+
+#[wasm_bindgen]
+impl GerberProcessor {
+    /// Create a new GerberProcessor instance
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> GerberProcessor {
+        GerberProcessor {
+            gl: None,
+            renderer: None,
+            next_layer_id: 0,
+        }
+    }
+
+    /// Initialize with WebGL 2.0 context
+    ///
+    /// # Arguments
+    /// * `gl` - WebGL 2.0 rendering context from canvas
+    ///
+    /// # Returns
+    /// * `"init_done"` signal on success
+    pub fn init(&mut self, gl: WebGl2RenderingContext) -> Result<String, JsValue> {
+        // Create renderer with WebGL context (initially no layers)
+        self.renderer = Some(Renderer::new(gl.clone())?);
+        self.gl = Some(gl);
+        Ok("init_done".to_string())
+    }
+
+    /// Add a new layer to the renderer
+    ///
+    /// # Arguments
+    /// * `content` - Gerber file content as string
+    ///
+    /// # Returns
+    /// * Layer ID (u32) for tracking this layer
+    pub fn add_layer(&mut self, content: String) -> Result<u32, JsValue> {
+        // Parse Gerber content to get Vec<GerberData> (one per polarity layer)
+        let gerber_data_layers = parse_gerber(&content)?;
+
+        // Add to renderer
+        if let Some(renderer) = &mut self.renderer {
+            let layer_index = renderer.add_layer(gerber_data_layers)?;
+            self.next_layer_id += 1;
+
+            // For now, layer_id matches layer_index
+            // In a more complex implementation, we could maintain a mapping
+            Ok(layer_index as u32)
+        } else {
+            Err(JsValue::from_str(
+                "Renderer not initialized. Call init() first.",
+            ))
+        }
+    }
+
+    /// Remove a layer from the renderer
+    ///
+    /// # Arguments
+    /// * `layer_id` - Layer ID returned from add_layer()
+    ///
+    /// # Returns
+    /// * `"remove_done"` signal on success
+    pub fn remove_layer(&mut self, layer_id: u32) -> Result<String, JsValue> {
+        if let Some(renderer) = &mut self.renderer {
+            renderer.remove_layer(layer_id as usize)?;
+            Ok("remove_done".to_string())
+        } else {
+            Err(JsValue::from_str(
+                "Renderer not initialized. Call init() first.",
+            ))
+        }
+    }
+
+    /// Clear all layers
+    ///
+    /// # Returns
+    /// * `"clear_done"` signal on success
+    pub fn clear(&mut self) -> Result<String, JsValue> {
+        if let Some(renderer) = &mut self.renderer {
+            renderer.clear_all();
+            self.next_layer_id = 0;
+            Ok("clear_done".to_string())
+        } else {
+            Err(JsValue::from_str(
+                "Renderer not initialized. Call init() first.",
+            ))
+        }
+    }
+
+    /// DEPRECATED: Use add_layer() instead
+    /// Parse Gerber file data and create renderer
+    ///
+    /// # Arguments
+    /// * `content` - Gerber file content as string
+    ///
+    /// # Returns
+    /// * `"parse_done"` signal on success
+    pub fn parse(&mut self, content: String) -> Result<String, JsValue> {
+        // Backward compatibility: just call add_layer
+        self.add_layer(content)?;
+        Ok("parse_done".to_string())
+    }
+
+    /// Set active layers (stores state for subsequent composite calls)
+    ///
+    /// # Arguments
+    /// * `active_layer_ids` - Array of layer IDs to render (in order)
+    /// * `color_data` - Flat array of [r, g, b] for each active layer (NO alpha)
+    ///
+    /// # Returns
+    /// * `"set_done"` signal on success
+    pub fn set_active_layers(
+        &mut self,
+        active_layer_ids: &[u32],
+        color_data: &[f32],
+    ) -> Result<String, JsValue> {
+        if let Some(renderer) = &mut self.renderer {
+            renderer.set_active_layers(active_layer_ids, color_data)?;
+            Ok("set_done".to_string())
+        } else {
+            Err(JsValue::from_str(
+                "Renderer not initialized. Call init() first.",
+            ))
+        }
+    }
+
+    /// Render geometry to FBOs and composite to canvas
+    ///
+    /// # Arguments
+    /// * `zoom_x` - Horizontal zoom factor
+    /// * `zoom_y` - Vertical zoom factor
+    /// * `offset_x` - Horizontal pan offset
+    /// * `offset_y` - Vertical pan offset
+    /// * `alpha` - Global alpha for all layers
+    ///
+    /// # Returns
+    /// * `"render_done"` signal on success
+    pub fn render(
+        &mut self,
+        zoom_x: f32,
+        zoom_y: f32,
+        offset_x: f32,
+        offset_y: f32,
+        alpha: f32,
+    ) -> Result<String, JsValue> {
+        if let Some(renderer) = &mut self.renderer {
+            renderer.render(zoom_x, zoom_y, offset_x, offset_y, alpha)?;
+            Ok("render_done".to_string())
+        } else {
+            Err(JsValue::from_str(
+                "Renderer not initialized. Call init() first.",
+            ))
+        }
+    }
+
+    /// Composite FBOs to canvas with updated alpha (reuses existing FBO geometry)
+    ///
+    /// # Arguments
+    /// * `alpha` - Global alpha for all layers
+    ///
+    /// # Returns
+    /// * `"composite_done"` signal on success
+    pub fn composite(&mut self, alpha: f32) -> Result<String, JsValue> {
+        if let Some(renderer) = &mut self.renderer {
+            renderer.composite(alpha)?;
+            Ok("composite_done".to_string())
+        } else {
+            Err(JsValue::from_str(
+                "Renderer not initialized. Call init() first.",
+            ))
+        }
+    }
+
+    /// Get the boundary of the parsed Gerber data for fitToView
+    ///
+    /// # Returns
+    /// * `Boundary` containing min/max x/y coordinates
+    ///
+    /// # Errors
+    /// * Returns error if parse() has not been called yet
+    pub fn get_boundary(&self) -> Result<Boundary, JsValue> {
+        if let Some(renderer) = &self.renderer {
+            Ok(renderer.get_boundary())
+        } else {
+            Err(JsValue::from_str(
+                "No data available. Call parse() first to parse Gerber content.",
+            ))
+        }
+    }
+
+    /// Resize framebuffers when canvas dimensions change (e.g., fullscreen)
+    ///
+    /// # Returns
+    /// * `"resize_done"` signal on success
+    ///
+    /// # Errors
+    /// * Returns error if renderer is not initialized
+    pub fn resize(&mut self) -> Result<String, JsValue> {
+        if let Some(renderer) = &mut self.renderer {
+            renderer.resize()?;
+            Ok("resize_done".to_string())
+        } else {
+            Err(JsValue::from_str(
+                "Renderer not initialized. Call init() and parse() first.",
+            ))
+        }
+    }
+}
+
+// triangulate_polygon is accessed through parser module

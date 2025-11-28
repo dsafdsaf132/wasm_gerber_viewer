@@ -1,0 +1,288 @@
+/* Base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  position: relative;
+}
+
+/* Button container (top-left) */
+.button-container {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  gap: 0.5rem;
+  z-index: 100;
+}
+
+/* Canvas area (left side) */
+.canvas-area {
+  flex: 1;
+  background-color: #000;
+  position: relative;
+  overflow: hidden;
+}
+
+.canvas-area canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+/* Drawer area (right side) */
+.drawer-area {
+  width: 300px;
+  background-color: #f8f9fa;
+  border-left: 1px solid #dee2e6;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  position: relative;
+  transition: none;
+}
+
+/* Drawer collapsed state */
+.drawer-area.collapsed {
+  width: 0 !important;
+  border-left: none;
+  min-width: 0;
+}
+
+/* Drawer resizing state */
+.drawer-area.resizing {
+  user-select: none;
+  pointer-events: none;
+  transition: none;
+}
+
+/* Resize handle */
+.resize-handle {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 998;
+  transition: background-color 0.2s;
+  pointer-events: auto;
+}
+
+.resize-handle:hover {
+  background-color: #0d6efd;
+}
+
+.resize-handle:active {
+  background-color: #0d6efd;
+}
+
+/* Drawer toggle button (inside drawer, positioned at left edge) */
+.drawer-toggle-btn {
+  position: absolute;
+  top: 50%;
+  left: -30px;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 100px;
+  border: 4px solid #6c757d;
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+  background-color: transparent;
+  color: #6c757d;
+  cursor: pointer;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition:
+    border-color 0.2s,
+    color 0.2s;
+  pointer-events: auto;
+}
+
+.drawer-toggle-btn:hover {
+  border-color: #495057;
+  color: #495057;
+}
+
+.drawer-toggle-btn:active {
+  border-color: #343a40;
+  color: #343a40;
+}
+
+.drawer-toggle-btn svg {
+  transform: scaleX(-1);
+  transition: transform 0.3s ease;
+}
+
+/* When drawer is collapsed, flip icon back */
+.drawer-area.collapsed .drawer-toggle-btn svg {
+  transform: scaleX(1);
+}
+
+/* File selection area */
+.file-selection {
+  padding: 1rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.file-selection .btn {
+  width: 100%;
+}
+
+/* Layer controls */
+.layer-controls {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.layer-controls .btn {
+  flex: 1;
+}
+
+/* Alpha control */
+.alpha-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.alpha-control label {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.alpha-control input[type="range"] {
+  flex: 1;
+}
+
+.alpha-control span {
+  min-width: 3rem;
+  text-align: right;
+  font-size: 0.875rem;
+}
+
+/* Layer list area */
+.layer-list-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.5rem;
+}
+
+.layer-list {
+  list-style: none;
+  padding: 5px;
+}
+
+/* Layer item */
+.layer-item {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  margin-bottom: 0.25rem;
+  background-color: #fff;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+  transition: background-color 0.2s;
+}
+
+.layer-item:hover {
+  background-color: #f1f3f5;
+}
+
+/* Color picker */
+.layer-color-picker {
+  width: 15px;
+  height: 15px;
+  border-radius: 2px;
+  border: 1px solid #adb5bd;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+}
+
+/* Checkbox */
+.layer-checkbox {
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+  cursor: pointer;
+}
+
+/* Layer label */
+.layer-label {
+  flex: 1;
+  font-size: 0.875rem;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Layer delete button */
+.layer-delete-btn {
+  margin-left: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background-color 0.2s;
+}
+
+.layer-delete-btn:hover {
+  background-color: #c82333;
+}
+
+.layer-delete-btn:active {
+  background-color: #bd2130;
+}
+
+/* Scrollbar styling */
+.layer-list-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.layer-list-container::-webkit-scrollbar-track {
+  background: #f1f3f5;
+  border-radius: 4px;
+}
+
+.layer-list-container::-webkit-scrollbar-thumb {
+  background: #adb5bd;
+  border-radius: 4px;
+}
+
+.layer-list-container::-webkit-scrollbar-thumb:hover {
+  background: #868e96;
+}
