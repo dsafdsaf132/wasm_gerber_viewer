@@ -1,4 +1,4 @@
-use crate::shape::{Arcs, Boundary, Circles, GerberData, Thermals, Triangles};
+use crate::shape::{Boundary, GerberData};
 use js_sys::Float32Array;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
@@ -728,78 +728,86 @@ impl Renderer {
     /// Draw instanced triangles
     fn draw_instanced_triangles(
         &mut self,
-        triangles: &Triangles,
         transform: &[f32; 9],
         color: &[f32; 4],
         layer_id: usize,
         sublayer_idx: usize,
     ) -> Result<(), JsValue> {
-        if triangles.indices.is_empty() {
-            return Ok(());
+        // Check if data is empty (short-lived borrow)
+        {
+            let layer = self.layers[layer_id].as_ref().unwrap();
+            if layer.gerber_data[sublayer_idx].triangles.indices.is_empty() {
+                return Ok(());
+            }
         }
 
         let program = &self.programs.triangle;
         self.gl.use_program(Some(&program.program));
 
-        // Get mutable reference to buffer cache
-        let layer = self.layers[layer_id]
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("Layer not found"))?;
-        let buffer_cache = &mut layer.buffer_caches[sublayer_idx];
+        // Buffer creation/update phase (scoped to end borrow early)
+        let index_count = {
+            let layer = self.layers[layer_id]
+                .as_mut()
+                .ok_or_else(|| JsValue::from_str("Layer not found"))?;
+            let triangles = &layer.gerber_data[sublayer_idx].triangles;
+            let buffer_cache = &mut layer.buffer_caches[sublayer_idx];
 
-        // Check if VAO is cached for this sublayer
-        if buffer_cache.triangle_vao.is_none() {
-            // Create VAO
-            let vao = self
-                .gl
-                .create_vertex_array()
-                .ok_or_else(|| JsValue::from_str("Failed to create VAO"))?;
-            self.gl.bind_vertex_array(Some(&vao));
+            // Check if VAO is cached for this sublayer
+            if buffer_cache.triangle_vao.is_none() {
+                // Create VAO
+                let vao = self
+                    .gl
+                    .create_vertex_array()
+                    .ok_or_else(|| JsValue::from_str("Failed to create VAO"))?;
+                self.gl.bind_vertex_array(Some(&vao));
 
-            // Create and bind vertex buffer
-            let vertex_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create vertex buffer"))?;
-            self.gl.bind_buffer(ARRAY_BUFFER, Some(&vertex_buffer));
-            unsafe {
-                let array = Float32Array::view(&triangles.vertices);
+                // Create and bind vertex buffer
+                let vertex_buffer = self
+                    .gl
+                    .create_buffer()
+                    .ok_or_else(|| JsValue::from_str("Failed to create vertex buffer"))?;
+                self.gl.bind_buffer(ARRAY_BUFFER, Some(&vertex_buffer));
+                unsafe {
+                    let array = Float32Array::view(&triangles.vertices);
+                    self.gl
+                        .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
+                }
+
+                // Create and bind index buffer
+                let index_buffer = self
+                    .gl
+                    .create_buffer()
+                    .ok_or_else(|| JsValue::from_str("Failed to create index buffer"))?;
                 self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
+                    .bind_buffer(ELEMENT_ARRAY_BUFFER, Some(&index_buffer));
+                unsafe {
+                    let array = js_sys::Uint32Array::view(&triangles.indices);
+                    self.gl.buffer_data_with_array_buffer_view(
+                        ELEMENT_ARRAY_BUFFER,
+                        &array,
+                        STATIC_DRAW,
+                    );
+                }
+
+                // Set up attributes
+                let position_loc = *program.attributes.get("position").unwrap();
+                self.gl.enable_vertex_attrib_array(position_loc);
+                self.gl
+                    .vertex_attrib_pointer_with_i32(position_loc, 2, FLOAT, false, 0, 0);
+
+                // Unbind VAO
+                self.gl.bind_vertex_array(None);
+
+                // Cache VAO and buffers for this sublayer
+                buffer_cache.triangle_vao = Some(vao);
+                buffer_cache.triangle_vertex_buffer = Some(vertex_buffer);
+                buffer_cache.triangle_index_buffer = Some(index_buffer);
             }
 
-            // Create and bind index buffer
-            let index_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create index buffer"))?;
-            self.gl
-                .bind_buffer(ELEMENT_ARRAY_BUFFER, Some(&index_buffer));
-            unsafe {
-                let array = js_sys::Uint32Array::view(&triangles.indices);
-                self.gl.buffer_data_with_array_buffer_view(
-                    ELEMENT_ARRAY_BUFFER,
-                    &array,
-                    STATIC_DRAW,
-                );
-            }
+            triangles.indices.len()
+        }; // Borrow ends here
 
-            // Set up attributes
-            let position_loc = *program.attributes.get("position").unwrap();
-            self.gl.enable_vertex_attrib_array(position_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(position_loc, 2, FLOAT, false, 0, 0);
-
-            // Unbind VAO
-            self.gl.bind_vertex_array(None);
-
-            // Cache VAO and buffers for this sublayer
-            buffer_cache.triangle_vao = Some(vao);
-            buffer_cache.triangle_vertex_buffer = Some(vertex_buffer);
-            buffer_cache.triangle_index_buffer = Some(index_buffer);
-        }
-
-        // Re-get immutable reference for rendering
+        // Rendering phase (new borrow)
         let layer = self.layers[layer_id].as_ref().unwrap();
         let buffer_cache = &layer.buffer_caches[sublayer_idx];
 
@@ -818,7 +826,7 @@ impl Renderer {
 
         // Draw
         self.gl
-            .draw_elements_with_i32(TRIANGLES, triangles.indices.len() as i32, UNSIGNED_INT, 0);
+            .draw_elements_with_i32(TRIANGLES, index_count as i32, UNSIGNED_INT, 0);
 
         // Unbind VAO to prevent state leakage
         self.gl.bind_vertex_array(None);
@@ -829,13 +837,16 @@ impl Renderer {
     /// Draw instanced circles
     fn draw_instanced_circles(
         &mut self,
-        circles: &Circles,
         transform: &[f32; 9],
         color: &[f32; 4],
         layer_id: usize,
         sublayer_idx: usize,
     ) -> Result<(), JsValue> {
-        let instance_count = circles.x.len();
+        // Check if data is empty (short-lived borrow)
+        let instance_count = {
+            let layer = self.layers[layer_id].as_ref().unwrap();
+            layer.gerber_data[sublayer_idx].circles.x.len()
+        };
         if instance_count == 0 {
             return Ok(());
         }
@@ -843,10 +854,12 @@ impl Renderer {
         let program = &self.programs.circle;
         self.gl.use_program(Some(&program.program));
 
-        // Get mutable reference to buffer cache
+        // Get mutable reference to buffer cache and immutable reference to data
+        // Split borrowing: gerber_data and buffer_caches are different fields
         let layer = self.layers[layer_id]
             .as_mut()
             .ok_or_else(|| JsValue::from_str("Layer not found"))?;
+        let circles = &layer.gerber_data[sublayer_idx].circles;
         let buffer_cache = &mut layer.buffer_caches[sublayer_idx];
 
         // Check if VAO is cached for this sublayer
@@ -944,13 +957,16 @@ impl Renderer {
     /// Draw instanced arcs
     fn draw_instanced_arcs(
         &mut self,
-        arcs: &Arcs,
         transform: &[f32; 9],
         color: &[f32; 4],
         layer_id: usize,
         sublayer_idx: usize,
     ) -> Result<(), JsValue> {
-        let instance_count = arcs.x.len();
+        // Check if data is empty (short-lived borrow)
+        let instance_count = {
+            let layer = self.layers[layer_id].as_ref().unwrap();
+            layer.gerber_data[sublayer_idx].arcs.x.len()
+        };
         if instance_count == 0 {
             return Ok(());
         }
@@ -958,10 +974,12 @@ impl Renderer {
         let program = &self.programs.arc;
         self.gl.use_program(Some(&program.program));
 
-        // Get mutable reference to buffer cache
+        // Get mutable reference to buffer cache and immutable reference to data
+        // Split borrowing: gerber_data and buffer_caches are different fields
         let layer = self.layers[layer_id]
             .as_mut()
             .ok_or_else(|| JsValue::from_str("Layer not found"))?;
+        let arcs = &layer.gerber_data[sublayer_idx].arcs;
         let buffer_cache = &mut layer.buffer_caches[sublayer_idx];
 
         // Check if VAO is cached for this sublayer
@@ -1113,13 +1131,16 @@ impl Renderer {
     /// Draw instanced thermals
     fn draw_instanced_thermals(
         &mut self,
-        thermals: &Thermals,
         transform: &[f32; 9],
         color: &[f32; 4],
         layer_id: usize,
         sublayer_idx: usize,
     ) -> Result<(), JsValue> {
-        let instance_count = thermals.x.len();
+        // Check if data is empty (short-lived borrow)
+        let instance_count = {
+            let layer = self.layers[layer_id].as_ref().unwrap();
+            layer.gerber_data[sublayer_idx].thermals.x.len()
+        };
         if instance_count == 0 {
             return Ok(());
         }
@@ -1127,10 +1148,12 @@ impl Renderer {
         let program = &self.programs.thermal;
         self.gl.use_program(Some(&program.program));
 
-        // Get mutable reference to buffer cache
+        // Get mutable reference to buffer cache and immutable reference to data
+        // Split borrowing: gerber_data and buffer_caches are different fields
         let layer = self.layers[layer_id]
             .as_mut()
             .ok_or_else(|| JsValue::from_str("Layer not found"))?;
+        let thermals = &layer.gerber_data[sublayer_idx].thermals;
         let buffer_cache = &mut layer.buffer_caches[sublayer_idx];
 
         // Check if VAO is cached for this sublayer
@@ -1294,11 +1317,11 @@ impl Renderer {
 
         let white_color = [1.0, 1.0, 1.0, 1.0];
 
-        // Get layer metadata (need to clone to avoid borrow checker issues)
-        let gerber_data_list = self.layers[layer_id].as_ref().unwrap().gerber_data.clone();
+        // Get sublayer count
+        let sublayer_count = self.layers[layer_id].as_ref().unwrap().gerber_data.len();
 
         // Render each polarity sublayer with appropriate blending
-        for (sublayer_idx, gerber_data) in gerber_data_list.iter().enumerate() {
+        for sublayer_idx in 0..sublayer_count {
             // Check polarity: even index = positive, odd index = negative
             let is_negative = (sublayer_idx % 2) == 1;
 
@@ -1314,49 +1337,11 @@ impl Renderer {
             }
             self.gl.blend_equation(FUNC_ADD);
 
-            // Clone sublayer data
-            let triangles = gerber_data.triangles().clone();
-            let circles = gerber_data.circles().clone();
-            let arcs = gerber_data.arcs().clone();
-            let thermals = gerber_data.thermals().clone();
-
-            // Render triangles
-            if !triangles.indices.is_empty() {
-                self.draw_instanced_triangles(
-                    &triangles,
-                    transform,
-                    &white_color,
-                    layer_id,
-                    sublayer_idx,
-                )?;
-            }
-
-            // Render circles
-            if !circles.x.is_empty() {
-                self.draw_instanced_circles(
-                    &circles,
-                    transform,
-                    &white_color,
-                    layer_id,
-                    sublayer_idx,
-                )?;
-            }
-
-            // Render arcs
-            if !arcs.x.is_empty() {
-                self.draw_instanced_arcs(&arcs, transform, &white_color, layer_id, sublayer_idx)?;
-            }
-
-            // Render thermals
-            if !thermals.x.is_empty() {
-                self.draw_instanced_thermals(
-                    &thermals,
-                    transform,
-                    &white_color,
-                    layer_id,
-                    sublayer_idx,
-                )?;
-            }
+            // Render all shapes (empty checks done inside draw methods)
+            self.draw_instanced_triangles(transform, &white_color, layer_id, sublayer_idx)?;
+            self.draw_instanced_circles(transform, &white_color, layer_id, sublayer_idx)?;
+            self.draw_instanced_arcs(transform, &white_color, layer_id, sublayer_idx)?;
+            self.draw_instanced_thermals(transform, &white_color, layer_id, sublayer_idx)?;
         }
 
         self.gl.disable(BLEND);

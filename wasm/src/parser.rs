@@ -1752,15 +1752,6 @@ impl GerberParser {
         Ok(gerber_data_layers)
     }
 
-    /// Reset parser state to defaults
-    fn reset(&mut self) {
-        self.positive_layers.clear();
-        self.negative_layers.clear();
-        self.current_primitives.clear();
-        self.region_contours.clear();
-        self.current_state = ParserState::default();
-    }
-
     /// Convert a vector of primitives to GerberData
     fn primitives_to_gerber_data(primitives: &[Primitive]) -> GerberData {
         let mut triangle_vertices: Vec<f32> = Vec::new();
@@ -2854,102 +2845,6 @@ mod tests {
         println!("-$1+$2 (where $1=5, $2=-2) = {:?}", result);
         assert_eq!(result, Ok(-7.0));
     }
-}
-
-/// Triangulation result containing both vertices and triangle indices
-#[wasm_bindgen]
-pub struct TriangulationResult {
-    points: Vec<f32>,
-    indices: Vec<u32>,
-}
-
-#[wasm_bindgen]
-impl TriangulationResult {
-    #[wasm_bindgen(getter)]
-    pub fn points(&self) -> Vec<f32> {
-        self.points.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn indices(&self) -> Vec<u32> {
-        self.indices.clone()
-    }
-}
-
-/// Triangulate a polygon with optional holes
-///
-/// # Arguments
-/// * `flat_vertices` - Flattened vertex coordinates [x1, y1, x2, y2, ...]
-/// * `hole_indices` - Indices where holes start in the vertex array
-///
-/// # Returns
-/// * `TriangulationResult` containing triangulated vertices and indices
-#[wasm_bindgen]
-pub fn triangulate_polygon(
-    flat_vertices: Vec<f32>,
-    hole_indices: Vec<u32>,
-) -> Result<TriangulationResult, JsValue> {
-    if flat_vertices.len() < 6 {
-        return Ok(TriangulationResult {
-            points: Vec::new(),
-            indices: Vec::new(),
-        });
-    }
-
-    if !flat_vertices.len().is_multiple_of(2) {
-        return Err(JsValue::from_str("flat_vertices length must be even"));
-    }
-
-    // Convert flat vertices to Vec<Vec<[f32; 2]>> format
-    let mut shape: Vec<Vec<[f32; 2]>> = Vec::new();
-
-    if hole_indices.is_empty() {
-        // No holes, just the main path
-        let mut path: Vec<[f32; 2]> = Vec::new();
-        for i in (0..flat_vertices.len()).step_by(2) {
-            path.push([flat_vertices[i], flat_vertices[i + 1]]);
-        }
-        shape.push(path);
-    } else {
-        // First hole index marks the end of main path
-        let first_hole_start = hole_indices[0] as usize;
-        let mut main_path: Vec<[f32; 2]> = Vec::new();
-        for i in (0..first_hole_start * 2).step_by(2) {
-            main_path.push([flat_vertices[i], flat_vertices[i + 1]]);
-        }
-        shape.push(main_path);
-
-        // Add holes
-        for i in 0..hole_indices.len() {
-            let hole_start = hole_indices[i] as usize;
-            let hole_end = if i + 1 < hole_indices.len() {
-                hole_indices[i + 1] as usize
-            } else {
-                flat_vertices.len() / 2
-            };
-
-            let mut hole_path: Vec<[f32; 2]> = Vec::new();
-            for j in (hole_start * 2..hole_end * 2).step_by(2) {
-                hole_path.push([flat_vertices[j], flat_vertices[j + 1]]);
-            }
-            shape.push(hole_path);
-        }
-    }
-
-    // Perform triangulation
-    let triangulation = shape.triangulate().to_triangulation::<u32>();
-
-    // Flatten points from [[f32; 2]] to [f32]
-    let mut flat_points: Vec<f32> = Vec::new();
-    for point in triangulation.points {
-        flat_points.push(point[0]);
-        flat_points.push(point[1]);
-    }
-
-    Ok(TriangulationResult {
-        points: flat_points,
-        indices: triangulation.indices,
-    })
 }
 
 /// Parse Format specification - %FSLAX24Y24*%

@@ -4,12 +4,6 @@ function isLikeNone(x) {
     return x === undefined || x === null;
 }
 
-function _assertBoolean(n) {
-    if (typeof(n) !== 'boolean') {
-        throw new Error(`expected a boolean argument, found ${typeof(n)}`);
-    }
-}
-
 let cachedUint8ArrayMemory0 = null;
 
 function getUint8ArrayMemory0() {
@@ -40,30 +34,10 @@ function getStringFromWasm0(ptr, len) {
     return decodeText(ptr, len);
 }
 
-function logError(f, args) {
-    try {
-        return f.apply(this, args);
-    } catch (e) {
-        let error = (function () {
-            try {
-                return e instanceof Error ? `${e.message}\n\nStack:\n${e.stack}` : e.toString();
-            } catch(_) {
-                return "<failed to stringify thrown value>";
-            }
-        }());
-        console.error("wasm-bindgen: imported JS function that was not marked as `catch` threw an error:", error);
-        throw e;
-    }
-}
-
 function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();
     wasm.__wbindgen_externrefs.set(idx, obj);
     return idx;
-}
-
-function _assertNum(n) {
-    if (typeof(n) !== 'number') throw new Error(`expected a number argument, found ${typeof(n)}`);
 }
 
 let WASM_VECTOR_LEN = 0;
@@ -82,8 +56,6 @@ if (!('encodeInto' in cachedTextEncoder)) {
 }
 
 function passStringToWasm0(arg, malloc, realloc) {
-
-    if (typeof(arg) !== 'string') throw new Error(`expected a string argument, found ${typeof(arg)}`);
 
     if (realloc === undefined) {
         const buf = cachedTextEncoder.encode(arg);
@@ -113,7 +85,7 @@ function passStringToWasm0(arg, malloc, realloc) {
         ptr = realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0;
         const view = getUint8ArrayMemory0().subarray(ptr + offset, ptr + len);
         const ret = cachedTextEncoder.encodeInto(arg, view);
-        if (ret.read !== arg.length) throw new Error('failed to pass whole string');
+
         offset += ret.written;
         ptr = realloc(ptr, len, offset, 1) >>> 0;
     }
@@ -204,30 +176,6 @@ function _assertClass(instance, klass) {
         throw new Error(`expected instance of ${klass.name}`);
     }
 }
-/**
- * Triangulate a polygon with optional holes
- *
- * # Arguments
- * * `flat_vertices` - Flattened vertex coordinates [x1, y1, x2, y2, ...]
- * * `hole_indices` - Indices where holes start in the vertex array
- *
- * # Returns
- * * `TriangulationResult` containing triangulated vertices and indices
- * @param {Float32Array} flat_vertices
- * @param {Uint32Array} hole_indices
- * @returns {TriangulationResult}
- */
-export function triangulate_polygon(flat_vertices, hole_indices) {
-    const ptr0 = passArrayF32ToWasm0(flat_vertices, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passArray32ToWasm0(hole_indices, wasm.__wbindgen_malloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.triangulate_polygon(ptr0, len0, ptr1, len1);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return TriangulationResult.__wrap(ret[0]);
-}
 
 const ArcsFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
@@ -236,14 +184,6 @@ const ArcsFinalization = (typeof FinalizationRegistry === 'undefined')
  * Arc primitive data structure
  */
 export class Arcs {
-
-    static __wrap(ptr) {
-        ptr = ptr >>> 0;
-        const obj = Object.create(Arcs.prototype);
-        obj.__wbg_ptr = ptr;
-        ArcsFinalization.register(obj, obj.__wbg_ptr, obj);
-        return obj;
-    }
 
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
@@ -255,50 +195,6 @@ export class Arcs {
     free() {
         const ptr = this.__destroy_into_raw();
         wasm.__wbg_arcs_free(ptr, 0);
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get start_angle() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.arcs_start_angle(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get sweep_angle() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.arcs_sweep_angle(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get x() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.arcs_x(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get y() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.arcs_y(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
     }
     /**
      * @param {Float32Array} x
@@ -325,28 +221,6 @@ export class Arcs {
         this.__wbg_ptr = ret >>> 0;
         ArcsFinalization.register(this, this.__wbg_ptr, this);
         return this;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get radius() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.arcs_radius(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get thickness() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.arcs_thickness(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
     }
 }
 if (Symbol.dispose) Arcs.prototype[Symbol.dispose] = Arcs.prototype.free;
@@ -394,8 +268,6 @@ export class Boundary {
      * @returns {number}
      */
     get max_x() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.boundary_max_x(this.__wbg_ptr);
         return ret;
     }
@@ -403,8 +275,6 @@ export class Boundary {
      * @returns {number}
      */
     get max_y() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.boundary_max_y(this.__wbg_ptr);
         return ret;
     }
@@ -412,8 +282,6 @@ export class Boundary {
      * @returns {number}
      */
     get min_x() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.boundary_min_x(this.__wbg_ptr);
         return ret;
     }
@@ -421,8 +289,6 @@ export class Boundary {
      * @returns {number}
      */
     get min_y() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.boundary_min_y(this.__wbg_ptr);
         return ret;
     }
@@ -437,14 +303,6 @@ const CirclesFinalization = (typeof FinalizationRegistry === 'undefined')
  */
 export class Circles {
 
-    static __wrap(ptr) {
-        ptr = ptr >>> 0;
-        const obj = Object.create(Circles.prototype);
-        obj.__wbg_ptr = ptr;
-        CirclesFinalization.register(obj, obj.__wbg_ptr, obj);
-        return obj;
-    }
-
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
         this.__wbg_ptr = 0;
@@ -455,28 +313,6 @@ export class Circles {
     free() {
         const ptr = this.__destroy_into_raw();
         wasm.__wbg_circles_free(ptr, 0);
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get x() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.circles_x(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get y() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.circles_y(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
     }
     /**
      * @param {Float32Array} x
@@ -494,17 +330,6 @@ export class Circles {
         this.__wbg_ptr = ret >>> 0;
         CirclesFinalization.register(this, this.__wbg_ptr, this);
         return this;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get radius() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.circles_radius(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
     }
 }
 if (Symbol.dispose) Circles.prototype[Symbol.dispose] = Circles.prototype.free;
@@ -537,79 +362,19 @@ export class GerberData {
      */
     constructor(triangles, circles, arcs, thermals, boundary) {
         _assertClass(triangles, Triangles);
-        if (triangles.__wbg_ptr === 0) {
-            throw new Error('Attempt to use a moved value');
-        }
         var ptr0 = triangles.__destroy_into_raw();
         _assertClass(circles, Circles);
-        if (circles.__wbg_ptr === 0) {
-            throw new Error('Attempt to use a moved value');
-        }
         var ptr1 = circles.__destroy_into_raw();
         _assertClass(arcs, Arcs);
-        if (arcs.__wbg_ptr === 0) {
-            throw new Error('Attempt to use a moved value');
-        }
         var ptr2 = arcs.__destroy_into_raw();
         _assertClass(thermals, Thermals);
-        if (thermals.__wbg_ptr === 0) {
-            throw new Error('Attempt to use a moved value');
-        }
         var ptr3 = thermals.__destroy_into_raw();
         _assertClass(boundary, Boundary);
-        if (boundary.__wbg_ptr === 0) {
-            throw new Error('Attempt to use a moved value');
-        }
         var ptr4 = boundary.__destroy_into_raw();
         const ret = wasm.gerberdata_new(ptr0, ptr1, ptr2, ptr3, ptr4);
         this.__wbg_ptr = ret >>> 0;
         GerberDataFinalization.register(this, this.__wbg_ptr, this);
         return this;
-    }
-    /**
-     * @returns {Arcs}
-     */
-    get arcs() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.gerberdata_arcs(this.__wbg_ptr);
-        return Arcs.__wrap(ret);
-    }
-    /**
-     * @returns {Circles}
-     */
-    get circles() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.gerberdata_circles(this.__wbg_ptr);
-        return Circles.__wrap(ret);
-    }
-    /**
-     * @returns {Boundary}
-     */
-    get boundary() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.gerberdata_boundary(this.__wbg_ptr);
-        return Boundary.__wrap(ret);
-    }
-    /**
-     * @returns {Thermals}
-     */
-    get thermals() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.gerberdata_thermals(this.__wbg_ptr);
-        return Thermals.__wrap(ret);
-    }
-    /**
-     * @returns {Triangles}
-     */
-    get triangles() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.gerberdata_triangles(this.__wbg_ptr);
-        return Triangles.__wrap(ret);
     }
 }
 if (Symbol.dispose) GerberData.prototype[Symbol.dispose] = GerberData.prototype.free;
@@ -644,8 +409,6 @@ export class GerberProcessor {
      * @returns {Boundary}
      */
     get_boundary() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.gerberprocessor_get_boundary(this.__wbg_ptr);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
@@ -667,9 +430,6 @@ export class GerberProcessor {
         let deferred2_0;
         let deferred2_1;
         try {
-            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-            _assertNum(this.__wbg_ptr);
-            _assertNum(layer_id);
             const ret = wasm.gerberprocessor_remove_layer(this.__wbg_ptr, layer_id);
             var ptr1 = ret[0];
             var len1 = ret[1];
@@ -701,8 +461,6 @@ export class GerberProcessor {
         let deferred4_0;
         let deferred4_1;
         try {
-            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-            _assertNum(this.__wbg_ptr);
             const ptr0 = passArray32ToWasm0(active_layer_ids, wasm.__wbindgen_malloc);
             const len0 = WASM_VECTOR_LEN;
             const ptr1 = passArrayF32ToWasm0(color_data, wasm.__wbindgen_malloc);
@@ -745,8 +503,6 @@ export class GerberProcessor {
         let deferred2_0;
         let deferred2_1;
         try {
-            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-            _assertNum(this.__wbg_ptr);
             const ret = wasm.gerberprocessor_init(this.__wbg_ptr, gl);
             var ptr1 = ret[0];
             var len1 = ret[1];
@@ -772,8 +528,6 @@ export class GerberProcessor {
         let deferred2_0;
         let deferred2_1;
         try {
-            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-            _assertNum(this.__wbg_ptr);
             const ret = wasm.gerberprocessor_clear(this.__wbg_ptr);
             var ptr1 = ret[0];
             var len1 = ret[1];
@@ -804,8 +558,6 @@ export class GerberProcessor {
         let deferred3_0;
         let deferred3_1;
         try {
-            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-            _assertNum(this.__wbg_ptr);
             const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
             const len0 = WASM_VECTOR_LEN;
             const ret = wasm.gerberprocessor_parse(this.__wbg_ptr, ptr0, len0);
@@ -845,8 +597,6 @@ export class GerberProcessor {
         let deferred2_0;
         let deferred2_1;
         try {
-            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-            _assertNum(this.__wbg_ptr);
             const ret = wasm.gerberprocessor_render(this.__wbg_ptr, zoom_x, zoom_y, offset_x, offset_y, alpha);
             var ptr1 = ret[0];
             var len1 = ret[1];
@@ -875,8 +625,6 @@ export class GerberProcessor {
         let deferred2_0;
         let deferred2_1;
         try {
-            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-            _assertNum(this.__wbg_ptr);
             const ret = wasm.gerberprocessor_resize(this.__wbg_ptr);
             var ptr1 = ret[0];
             var len1 = ret[1];
@@ -903,8 +651,6 @@ export class GerberProcessor {
      * @returns {number}
      */
     add_layer(content) {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.gerberprocessor_add_layer(this.__wbg_ptr, ptr0, len0);
@@ -928,8 +674,6 @@ export class GerberProcessor {
         let deferred2_0;
         let deferred2_1;
         try {
-            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-            _assertNum(this.__wbg_ptr);
             const ret = wasm.gerberprocessor_composite(this.__wbg_ptr, alpha);
             var ptr1 = ret[0];
             var len1 = ret[1];
@@ -955,14 +699,6 @@ const ThermalsFinalization = (typeof FinalizationRegistry === 'undefined')
  */
 export class Thermals {
 
-    static __wrap(ptr) {
-        ptr = ptr >>> 0;
-        const obj = Object.create(Thermals.prototype);
-        obj.__wbg_ptr = ptr;
-        ThermalsFinalization.register(obj, obj.__wbg_ptr, obj);
-        return obj;
-    }
-
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
         this.__wbg_ptr = 0;
@@ -973,61 +709,6 @@ export class Thermals {
     free() {
         const ptr = this.__destroy_into_raw();
         wasm.__wbg_thermals_free(ptr, 0);
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get gap_thickness() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.thermals_gap_thickness(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get inner_diameter() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.thermals_inner_diameter(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get outer_diameter() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.thermals_outer_diameter(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get x() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.thermals_x(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get y() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.thermals_y(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
     }
     /**
      * @param {Float32Array} x
@@ -1050,21 +731,10 @@ export class Thermals {
         const len4 = WASM_VECTOR_LEN;
         const ptr5 = passArrayF32ToWasm0(rotation, wasm.__wbindgen_malloc);
         const len5 = WASM_VECTOR_LEN;
-        const ret = wasm.thermals_new(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
+        const ret = wasm.arcs_new(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
         this.__wbg_ptr = ret >>> 0;
         ThermalsFinalization.register(this, this.__wbg_ptr, this);
         return this;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get rotation() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.thermals_rotation(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
     }
 }
 if (Symbol.dispose) Thermals.prototype[Symbol.dispose] = Thermals.prototype.free;
@@ -1076,14 +746,6 @@ const TrianglesFinalization = (typeof FinalizationRegistry === 'undefined')
  * Triangle mesh data structure
  */
 export class Triangles {
-
-    static __wrap(ptr) {
-        ptr = ptr >>> 0;
-        const obj = Object.create(Triangles.prototype);
-        obj.__wbg_ptr = ptr;
-        TrianglesFinalization.register(obj, obj.__wbg_ptr, obj);
-        return obj;
-    }
 
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
@@ -1110,86 +772,8 @@ export class Triangles {
         TrianglesFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
-    /**
-     * @returns {Uint32Array}
-     */
-    get indices() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.triangles_indices(this.__wbg_ptr);
-        var v1 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get vertices() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.triangles_vertices(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
 }
 if (Symbol.dispose) Triangles.prototype[Symbol.dispose] = Triangles.prototype.free;
-
-const TriangulationResultFinalization = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_triangulationresult_free(ptr >>> 0, 1));
-/**
- * Triangulation result containing both vertices and triangle indices
- */
-export class TriangulationResult {
-
-    constructor() {
-        throw new Error('cannot invoke `new` directly');
-    }
-
-    static __wrap(ptr) {
-        ptr = ptr >>> 0;
-        const obj = Object.create(TriangulationResult.prototype);
-        obj.__wbg_ptr = ptr;
-        TriangulationResultFinalization.register(obj, obj.__wbg_ptr, obj);
-        return obj;
-    }
-
-    __destroy_into_raw() {
-        const ptr = this.__wbg_ptr;
-        this.__wbg_ptr = 0;
-        TriangulationResultFinalization.unregister(this);
-        return ptr;
-    }
-
-    free() {
-        const ptr = this.__destroy_into_raw();
-        wasm.__wbg_triangulationresult_free(ptr, 0);
-    }
-    /**
-     * @returns {Float32Array}
-     */
-    get points() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.triangulationresult_points(this.__wbg_ptr);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-    /**
-     * @returns {Uint32Array}
-     */
-    get indices() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.triangulationresult_indices(this.__wbg_ptr);
-        var v1 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-}
-if (Symbol.dispose) TriangulationResult.prototype[Symbol.dispose] = TriangulationResult.prototype.free;
 
 const EXPECTED_RESPONSE_TYPES = new Set(['basic', 'cors', 'default']);
 
@@ -1232,100 +816,97 @@ function __wbg_get_imports() {
     imports.wbg.__wbg___wbindgen_boolean_get_6d5a1ee65bab5f68 = function(arg0) {
         const v = arg0;
         const ret = typeof(v) === 'boolean' ? v : undefined;
-        if (!isLikeNone(ret)) {
-            _assertBoolean(ret);
-        }
         return isLikeNone(ret) ? 0xFFFFFF : ret ? 1 : 0;
     };
     imports.wbg.__wbg___wbindgen_throw_b855445ff6a94295 = function(arg0, arg1) {
         throw new Error(getStringFromWasm0(arg0, arg1));
     };
-    imports.wbg.__wbg_activeTexture_48c9bc28acaaa54d = function() { return logError(function (arg0, arg1) {
+    imports.wbg.__wbg_activeTexture_48c9bc28acaaa54d = function(arg0, arg1) {
         arg0.activeTexture(arg1 >>> 0);
-    }, arguments) };
-    imports.wbg.__wbg_attachShader_4729f6e4e28e3c47 = function() { return logError(function (arg0, arg1, arg2) {
+    };
+    imports.wbg.__wbg_attachShader_4729f6e4e28e3c47 = function(arg0, arg1, arg2) {
         arg0.attachShader(arg1, arg2);
-    }, arguments) };
-    imports.wbg.__wbg_bindBuffer_54099db8f6d4b751 = function() { return logError(function (arg0, arg1, arg2) {
+    };
+    imports.wbg.__wbg_bindBuffer_54099db8f6d4b751 = function(arg0, arg1, arg2) {
         arg0.bindBuffer(arg1 >>> 0, arg2);
-    }, arguments) };
-    imports.wbg.__wbg_bindFramebuffer_847f466d072551ab = function() { return logError(function (arg0, arg1, arg2) {
+    };
+    imports.wbg.__wbg_bindFramebuffer_847f466d072551ab = function(arg0, arg1, arg2) {
         arg0.bindFramebuffer(arg1 >>> 0, arg2);
-    }, arguments) };
-    imports.wbg.__wbg_bindTexture_ada4abace31e0749 = function() { return logError(function (arg0, arg1, arg2) {
+    };
+    imports.wbg.__wbg_bindTexture_ada4abace31e0749 = function(arg0, arg1, arg2) {
         arg0.bindTexture(arg1 >>> 0, arg2);
-    }, arguments) };
-    imports.wbg.__wbg_bindVertexArray_c061c24c9d2fbfef = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbg_bindVertexArray_c061c24c9d2fbfef = function(arg0, arg1) {
         arg0.bindVertexArray(arg1);
-    }, arguments) };
-    imports.wbg.__wbg_blendEquation_61323fac068c262a = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbg_blendEquation_61323fac068c262a = function(arg0, arg1) {
         arg0.blendEquation(arg1 >>> 0);
-    }, arguments) };
-    imports.wbg.__wbg_blendFuncSeparate_efd2b4ec166727db = function() { return logError(function (arg0, arg1, arg2, arg3, arg4) {
+    };
+    imports.wbg.__wbg_blendFuncSeparate_efd2b4ec166727db = function(arg0, arg1, arg2, arg3, arg4) {
         arg0.blendFuncSeparate(arg1 >>> 0, arg2 >>> 0, arg3 >>> 0, arg4 >>> 0);
-    }, arguments) };
-    imports.wbg.__wbg_blendFunc_328efc81a0f974bb = function() { return logError(function (arg0, arg1, arg2) {
+    };
+    imports.wbg.__wbg_blendFunc_328efc81a0f974bb = function(arg0, arg1, arg2) {
         arg0.blendFunc(arg1 >>> 0, arg2 >>> 0);
-    }, arguments) };
-    imports.wbg.__wbg_bufferData_121b54242e0dabb1 = function() { return logError(function (arg0, arg1, arg2, arg3) {
+    };
+    imports.wbg.__wbg_bufferData_121b54242e0dabb1 = function(arg0, arg1, arg2, arg3) {
         arg0.bufferData(arg1 >>> 0, arg2, arg3 >>> 0);
-    }, arguments) };
-    imports.wbg.__wbg_canvas_6f15478b1f103abb = function() { return logError(function (arg0) {
+    };
+    imports.wbg.__wbg_canvas_6f15478b1f103abb = function(arg0) {
         const ret = arg0.canvas;
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-    }, arguments) };
-    imports.wbg.__wbg_clearColor_e7b3ddf4fdaaecaa = function() { return logError(function (arg0, arg1, arg2, arg3, arg4) {
+    };
+    imports.wbg.__wbg_clearColor_e7b3ddf4fdaaecaa = function(arg0, arg1, arg2, arg3, arg4) {
         arg0.clearColor(arg1, arg2, arg3, arg4);
-    }, arguments) };
-    imports.wbg.__wbg_clear_bd1d14ac12f3d45d = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbg_clear_bd1d14ac12f3d45d = function(arg0, arg1) {
         arg0.clear(arg1 >>> 0);
-    }, arguments) };
-    imports.wbg.__wbg_compileShader_b6b9c3922553e2b5 = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbg_compileShader_b6b9c3922553e2b5 = function(arg0, arg1) {
         arg0.compileShader(arg1);
-    }, arguments) };
-    imports.wbg.__wbg_createBuffer_5d773097dcb49bc5 = function() { return logError(function (arg0) {
+    };
+    imports.wbg.__wbg_createBuffer_5d773097dcb49bc5 = function(arg0) {
         const ret = arg0.createBuffer();
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-    }, arguments) };
-    imports.wbg.__wbg_createFramebuffer_0f0b136542e6a783 = function() { return logError(function (arg0) {
+    };
+    imports.wbg.__wbg_createFramebuffer_0f0b136542e6a783 = function(arg0) {
         const ret = arg0.createFramebuffer();
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-    }, arguments) };
-    imports.wbg.__wbg_createProgram_76f1b3b1649a6a70 = function() { return logError(function (arg0) {
+    };
+    imports.wbg.__wbg_createProgram_76f1b3b1649a6a70 = function(arg0) {
         const ret = arg0.createProgram();
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-    }, arguments) };
-    imports.wbg.__wbg_createShader_8956396370304fdd = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbg_createShader_8956396370304fdd = function(arg0, arg1) {
         const ret = arg0.createShader(arg1 >>> 0);
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-    }, arguments) };
-    imports.wbg.__wbg_createTexture_b4154609b3be9454 = function() { return logError(function (arg0) {
+    };
+    imports.wbg.__wbg_createTexture_b4154609b3be9454 = function(arg0) {
         const ret = arg0.createTexture();
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-    }, arguments) };
-    imports.wbg.__wbg_createVertexArray_0060b507a03b9521 = function() { return logError(function (arg0) {
+    };
+    imports.wbg.__wbg_createVertexArray_0060b507a03b9521 = function(arg0) {
         const ret = arg0.createVertexArray();
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-    }, arguments) };
-    imports.wbg.__wbg_disable_8a379385ec68f6aa = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbg_disable_8a379385ec68f6aa = function(arg0, arg1) {
         arg0.disable(arg1 >>> 0);
-    }, arguments) };
-    imports.wbg.__wbg_drawArraysInstanced_d5a66fa2c3a32cda = function() { return logError(function (arg0, arg1, arg2, arg3, arg4) {
+    };
+    imports.wbg.__wbg_drawArraysInstanced_d5a66fa2c3a32cda = function(arg0, arg1, arg2, arg3, arg4) {
         arg0.drawArraysInstanced(arg1 >>> 0, arg2, arg3, arg4);
-    }, arguments) };
-    imports.wbg.__wbg_drawArrays_42ee4f71cad07136 = function() { return logError(function (arg0, arg1, arg2, arg3) {
+    };
+    imports.wbg.__wbg_drawArrays_42ee4f71cad07136 = function(arg0, arg1, arg2, arg3) {
         arg0.drawArrays(arg1 >>> 0, arg2, arg3);
-    }, arguments) };
-    imports.wbg.__wbg_drawElements_7c2a1a67924d993d = function() { return logError(function (arg0, arg1, arg2, arg3, arg4) {
+    };
+    imports.wbg.__wbg_drawElements_7c2a1a67924d993d = function(arg0, arg1, arg2, arg3, arg4) {
         arg0.drawElements(arg1 >>> 0, arg2, arg3 >>> 0, arg4);
-    }, arguments) };
-    imports.wbg.__wbg_enableVertexAttribArray_10d871fb9fd0846c = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbg_enableVertexAttribArray_10d871fb9fd0846c = function(arg0, arg1) {
         arg0.enableVertexAttribArray(arg1 >>> 0);
-    }, arguments) };
-    imports.wbg.__wbg_enable_e086a91d756e13d4 = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbg_enable_e086a91d756e13d4 = function(arg0, arg1) {
         arg0.enable(arg1 >>> 0);
-    }, arguments) };
-    imports.wbg.__wbg_error_7534b8e9a36f1ab4 = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbg_error_7534b8e9a36f1ab4 = function(arg0, arg1) {
         let deferred0_0;
         let deferred0_1;
         try {
@@ -1335,47 +916,45 @@ function __wbg_get_imports() {
         } finally {
             wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
         }
-    }, arguments) };
-    imports.wbg.__wbg_framebufferTexture2D_52df07a1bb4d540a = function() { return logError(function (arg0, arg1, arg2, arg3, arg4, arg5) {
+    };
+    imports.wbg.__wbg_framebufferTexture2D_52df07a1bb4d540a = function(arg0, arg1, arg2, arg3, arg4, arg5) {
         arg0.framebufferTexture2D(arg1 >>> 0, arg2 >>> 0, arg3 >>> 0, arg4, arg5);
-    }, arguments) };
-    imports.wbg.__wbg_getAttribLocation_49bd303d768cecdc = function() { return logError(function (arg0, arg1, arg2, arg3) {
+    };
+    imports.wbg.__wbg_getAttribLocation_49bd303d768cecdc = function(arg0, arg1, arg2, arg3) {
         const ret = arg0.getAttribLocation(arg1, getStringFromWasm0(arg2, arg3));
-        _assertNum(ret);
         return ret;
-    }, arguments) };
-    imports.wbg.__wbg_getProgramInfoLog_579753d7443e93d0 = function() { return logError(function (arg0, arg1, arg2) {
+    };
+    imports.wbg.__wbg_getProgramInfoLog_579753d7443e93d0 = function(arg0, arg1, arg2) {
         const ret = arg1.getProgramInfoLog(arg2);
         var ptr1 = isLikeNone(ret) ? 0 : passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         var len1 = WASM_VECTOR_LEN;
         getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
         getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-    }, arguments) };
-    imports.wbg.__wbg_getProgramParameter_c7c229864f96a134 = function() { return logError(function (arg0, arg1, arg2) {
+    };
+    imports.wbg.__wbg_getProgramParameter_c7c229864f96a134 = function(arg0, arg1, arg2) {
         const ret = arg0.getProgramParameter(arg1, arg2 >>> 0);
         return ret;
-    }, arguments) };
-    imports.wbg.__wbg_getShaderInfoLog_77e0c47daa4370bb = function() { return logError(function (arg0, arg1, arg2) {
+    };
+    imports.wbg.__wbg_getShaderInfoLog_77e0c47daa4370bb = function(arg0, arg1, arg2) {
         const ret = arg1.getShaderInfoLog(arg2);
         var ptr1 = isLikeNone(ret) ? 0 : passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         var len1 = WASM_VECTOR_LEN;
         getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
         getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-    }, arguments) };
-    imports.wbg.__wbg_getShaderParameter_e3163f97690735a5 = function() { return logError(function (arg0, arg1, arg2) {
+    };
+    imports.wbg.__wbg_getShaderParameter_e3163f97690735a5 = function(arg0, arg1, arg2) {
         const ret = arg0.getShaderParameter(arg1, arg2 >>> 0);
         return ret;
-    }, arguments) };
-    imports.wbg.__wbg_getUniformLocation_595d98b1f60ef0bd = function() { return logError(function (arg0, arg1, arg2, arg3) {
+    };
+    imports.wbg.__wbg_getUniformLocation_595d98b1f60ef0bd = function(arg0, arg1, arg2, arg3) {
         const ret = arg0.getUniformLocation(arg1, getStringFromWasm0(arg2, arg3));
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-    }, arguments) };
-    imports.wbg.__wbg_height_119077665279308c = function() { return logError(function (arg0) {
+    };
+    imports.wbg.__wbg_height_119077665279308c = function(arg0) {
         const ret = arg0.height;
-        _assertNum(ret);
         return ret;
-    }, arguments) };
-    imports.wbg.__wbg_instanceof_HtmlCanvasElement_3e2e95b109dae976 = function() { return logError(function (arg0) {
+    };
+    imports.wbg.__wbg_instanceof_HtmlCanvasElement_3e2e95b109dae976 = function(arg0) {
         let result;
         try {
             result = arg0 instanceof HTMLCanvasElement;
@@ -1383,73 +962,71 @@ function __wbg_get_imports() {
             result = false;
         }
         const ret = result;
-        _assertBoolean(ret);
         return ret;
-    }, arguments) };
-    imports.wbg.__wbg_linkProgram_18ffcc2016a8ef92 = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbg_linkProgram_18ffcc2016a8ef92 = function(arg0, arg1) {
         arg0.linkProgram(arg1);
-    }, arguments) };
-    imports.wbg.__wbg_new_8a6f238a6ece86ea = function() { return logError(function () {
+    };
+    imports.wbg.__wbg_new_8a6f238a6ece86ea = function() {
         const ret = new Error();
         return ret;
-    }, arguments) };
-    imports.wbg.__wbg_shaderSource_3d2fab949529ee31 = function() { return logError(function (arg0, arg1, arg2, arg3) {
+    };
+    imports.wbg.__wbg_shaderSource_3d2fab949529ee31 = function(arg0, arg1, arg2, arg3) {
         arg0.shaderSource(arg1, getStringFromWasm0(arg2, arg3));
-    }, arguments) };
-    imports.wbg.__wbg_stack_0ed75d68575b0f3c = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbg_stack_0ed75d68575b0f3c = function(arg0, arg1) {
         const ret = arg1.stack;
         const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
         getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
         getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-    }, arguments) };
+    };
     imports.wbg.__wbg_texImage2D_9bdba72682cc4411 = function() { return handleError(function (arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10) {
         arg0.texImage2D(arg1 >>> 0, arg2, arg3, arg4, arg5, arg6, arg7 >>> 0, arg8 >>> 0, arg9 === 0 ? undefined : getArrayU8FromWasm0(arg9, arg10));
     }, arguments) };
-    imports.wbg.__wbg_texParameteri_b2871a22f57e806d = function() { return logError(function (arg0, arg1, arg2, arg3) {
+    imports.wbg.__wbg_texParameteri_b2871a22f57e806d = function(arg0, arg1, arg2, arg3) {
         arg0.texParameteri(arg1 >>> 0, arg2 >>> 0, arg3);
-    }, arguments) };
-    imports.wbg.__wbg_uniform1i_fe4307a416c7e7aa = function() { return logError(function (arg0, arg1, arg2) {
+    };
+    imports.wbg.__wbg_uniform1i_fe4307a416c7e7aa = function(arg0, arg1, arg2) {
         arg0.uniform1i(arg1, arg2);
-    }, arguments) };
-    imports.wbg.__wbg_uniform4fv_8fd48d16c1040c6a = function() { return logError(function (arg0, arg1, arg2, arg3) {
+    };
+    imports.wbg.__wbg_uniform4fv_8fd48d16c1040c6a = function(arg0, arg1, arg2, arg3) {
         arg0.uniform4fv(arg1, getArrayF32FromWasm0(arg2, arg3));
-    }, arguments) };
-    imports.wbg.__wbg_uniformMatrix3fv_45ee220dfb318eee = function() { return logError(function (arg0, arg1, arg2, arg3, arg4) {
+    };
+    imports.wbg.__wbg_uniformMatrix3fv_45ee220dfb318eee = function(arg0, arg1, arg2, arg3, arg4) {
         arg0.uniformMatrix3fv(arg1, arg2 !== 0, getArrayF32FromWasm0(arg3, arg4));
-    }, arguments) };
-    imports.wbg.__wbg_useProgram_20101ed5f7e0d637 = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbg_useProgram_20101ed5f7e0d637 = function(arg0, arg1) {
         arg0.useProgram(arg1);
-    }, arguments) };
-    imports.wbg.__wbg_vertexAttribDivisor_a03c25c88e81ab48 = function() { return logError(function (arg0, arg1, arg2) {
+    };
+    imports.wbg.__wbg_vertexAttribDivisor_a03c25c88e81ab48 = function(arg0, arg1, arg2) {
         arg0.vertexAttribDivisor(arg1 >>> 0, arg2 >>> 0);
-    }, arguments) };
-    imports.wbg.__wbg_vertexAttribPointer_316e3d795c40b758 = function() { return logError(function (arg0, arg1, arg2, arg3, arg4, arg5, arg6) {
+    };
+    imports.wbg.__wbg_vertexAttribPointer_316e3d795c40b758 = function(arg0, arg1, arg2, arg3, arg4, arg5, arg6) {
         arg0.vertexAttribPointer(arg1 >>> 0, arg2, arg3 >>> 0, arg4 !== 0, arg5, arg6);
-    }, arguments) };
-    imports.wbg.__wbg_viewport_774feeb955171e3d = function() { return logError(function (arg0, arg1, arg2, arg3, arg4) {
+    };
+    imports.wbg.__wbg_viewport_774feeb955171e3d = function(arg0, arg1, arg2, arg3, arg4) {
         arg0.viewport(arg1, arg2, arg3, arg4);
-    }, arguments) };
-    imports.wbg.__wbg_width_9ea2df52b5d2c909 = function() { return logError(function (arg0) {
+    };
+    imports.wbg.__wbg_width_9ea2df52b5d2c909 = function(arg0) {
         const ret = arg0.width;
-        _assertNum(ret);
         return ret;
-    }, arguments) };
-    imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(String) -> Externref`.
         const ret = getStringFromWasm0(arg0, arg1);
         return ret;
-    }, arguments) };
-    imports.wbg.__wbindgen_cast_7c316abdc43840a3 = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbindgen_cast_7c316abdc43840a3 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(Slice(U32)) -> NamedExternref("Uint32Array")`.
         const ret = getArrayU32FromWasm0(arg0, arg1);
         return ret;
-    }, arguments) };
-    imports.wbg.__wbindgen_cast_cd07b1914aa3d62c = function() { return logError(function (arg0, arg1) {
+    };
+    imports.wbg.__wbindgen_cast_cd07b1914aa3d62c = function(arg0, arg1) {
         // Cast intrinsic for `Ref(Slice(F32)) -> NamedExternref("Float32Array")`.
         const ret = getArrayF32FromWasm0(arg0, arg1);
         return ret;
-    }, arguments) };
+    };
     imports.wbg.__wbindgen_init_externref_table = function() {
         const table = wasm.__wbindgen_externrefs;
         const offset = table.grow(4);

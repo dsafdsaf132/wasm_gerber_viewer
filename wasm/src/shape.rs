@@ -1,9 +1,7 @@
 use wasm_bindgen::prelude::*;
 
-
 /// Triangle mesh data structure
 #[wasm_bindgen]
-#[derive(Clone)]
 pub struct Triangles {
     pub(crate) vertices: Vec<f32>,
     pub(crate) indices: Vec<u32>,
@@ -15,22 +13,10 @@ impl Triangles {
     pub fn new(vertices: Vec<f32>, indices: Vec<u32>) -> Triangles {
         Triangles { vertices, indices }
     }
-
-    #[wasm_bindgen(getter)]
-    pub fn vertices(&self) -> Vec<f32> {
-        self.vertices.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn indices(&self) -> Vec<u32> {
-        self.indices.clone()
-    }
 }
-
 
 /// Circle primitive data structure
 #[wasm_bindgen]
-#[derive(Clone)]
 pub struct Circles {
     pub(crate) x: Vec<f32>,
     pub(crate) y: Vec<f32>,
@@ -43,27 +29,10 @@ impl Circles {
     pub fn new(x: Vec<f32>, y: Vec<f32>, radius: Vec<f32>) -> Circles {
         Circles { x, y, radius }
     }
-
-    #[wasm_bindgen(getter)]
-    pub fn x(&self) -> Vec<f32> {
-        self.x.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn y(&self) -> Vec<f32> {
-        self.y.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn radius(&self) -> Vec<f32> {
-        self.radius.clone()
-    }
 }
-
 
 /// Arc primitive data structure
 #[wasm_bindgen]
-#[derive(Clone)]
 pub struct Arcs {
     pub(crate) x: Vec<f32>,
     pub(crate) y: Vec<f32>,
@@ -93,42 +62,10 @@ impl Arcs {
             thickness,
         }
     }
-
-    #[wasm_bindgen(getter)]
-    pub fn x(&self) -> Vec<f32> {
-        self.x.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn y(&self) -> Vec<f32> {
-        self.y.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn radius(&self) -> Vec<f32> {
-        self.radius.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn start_angle(&self) -> Vec<f32> {
-        self.start_angle.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn sweep_angle(&self) -> Vec<f32> {
-        self.sweep_angle.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn thickness(&self) -> Vec<f32> {
-        self.thickness.clone()
-    }
 }
-
 
 /// Thermal primitive data structure
 #[wasm_bindgen]
-#[derive(Clone)]
 pub struct Thermals {
     pub(crate) x: Vec<f32>,
     pub(crate) y: Vec<f32>,
@@ -158,42 +95,10 @@ impl Thermals {
             rotation,
         }
     }
-
-    #[wasm_bindgen(getter)]
-    pub fn x(&self) -> Vec<f32> {
-        self.x.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn y(&self) -> Vec<f32> {
-        self.y.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn outer_diameter(&self) -> Vec<f32> {
-        self.outer_diameter.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn inner_diameter(&self) -> Vec<f32> {
-        self.inner_diameter.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn gap_thickness(&self) -> Vec<f32> {
-        self.gap_thickness.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn rotation(&self) -> Vec<f32> {
-        self.rotation.clone()
-    }
 }
-
 
 /// Boundary information for the entire Gerber layer
 #[wasm_bindgen]
-#[derive(Clone)]
 pub struct Boundary {
     pub(crate) min_x: f32,
     pub(crate) max_x: f32,
@@ -236,7 +141,6 @@ impl Boundary {
 
 /// Container for all parsed Gerber data
 #[wasm_bindgen]
-#[derive(Clone)]
 pub struct GerberData {
     pub(crate) triangles: Triangles,
     pub(crate) circles: Circles,
@@ -262,30 +166,5 @@ impl GerberData {
             thermals,
             boundary,
         }
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn triangles(&self) -> Triangles {
-        self.triangles.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn circles(&self) -> Circles {
-        self.circles.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn arcs(&self) -> Arcs {
-        self.arcs.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn thermals(&self) -> Thermals {
-        self.thermals.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn boundary(&self) -> Boundary {
-        self.boundary.clone()
     }
 }
