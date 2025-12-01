@@ -31,7 +31,7 @@ Open `http://localhost:8000` and upload files.
 wasm_gerber_viewer/
 ├── index.html                             # Main page
 ├── js/                                    # JavaScript files
-│   └── main.js                            # Main application (GerberViewerApp)
+│   └── main.js                            # Main application (GerberViewer)
 ├── css/                                   # Stylesheets
 │   └── style.css                          # Application styles
 └── wasm/                                  # Rust/WASM module
