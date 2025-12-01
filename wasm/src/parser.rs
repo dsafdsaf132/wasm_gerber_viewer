@@ -46,51 +46,6 @@ pub enum Primitive {
     },
 }
 
-impl Primitive {
-    /// Rotate primitive by given angle around center
-    pub fn rotate(&mut self, angle: f32, center_x: f32, center_y: f32) {
-        match self {
-            Primitive::Triangle { vertices, .. } => {
-                for vertex in vertices.iter_mut() {
-                    rotate_point(vertex, angle, center_x, center_y);
-                }
-            }
-            Primitive::Circle { x, y, .. } => {
-                let mut point = [*x, *y];
-                rotate_point(&mut point, angle, center_x, center_y);
-                *x = point[0];
-                *y = point[1];
-            }
-            Primitive::Arc {
-                x,
-                y,
-                start_angle,
-                end_angle,
-                ..
-            } => {
-                let mut point = [*x, *y];
-                rotate_point(&mut point, angle, center_x, center_y);
-                *x = point[0];
-                *y = point[1];
-                *start_angle += angle;
-                *end_angle += angle;
-            }
-            Primitive::Thermal {
-                x,
-                y,
-                rotation: thermal_rotation,
-                ..
-            } => {
-                let mut point = [*x, *y];
-                rotate_point(&mut point, angle, center_x, center_y);
-                *x = point[0];
-                *y = point[1];
-                *thermal_rotation += angle;
-            }
-        }
-    }
-}
-
 /// Rotate point around given center
 #[inline]
 fn rotate_point(point: &mut [f32; 2], angle: f32, center_x: f32, center_y: f32) {
@@ -430,265 +385,6 @@ fn line_to_triangles(
     ]
 }
 
-/// Convert Gerber macro primitive directly to iOverlay Shape format
-/// Returns Shape: Vec<Contour> where first contour is outer boundary (CCW),
-/// subsequent contours are holes (CW)
-///
-/// Shape format: Vec<Vec<[f32; 2]>>
-///   - Contour 0: Outer boundary (counterclockwise)
-///   - Contour 1..N: Holes (clockwise)
-#[allow(dead_code)]
-fn macro_primitive_to_shape(
-    code: u32,
-    params: &[f32],
-    _exposure: f32,
-) -> Option<Vec<Vec<[f32; 2]>>> {
-    match code {
-        1 => {
-            // Circle: exposure, diameter, centerX, centerY, [rotation]
-            if params.len() < 3 {
-                return None;
-            }
-            let diameter = params[0];
-            let center_x = params[1];
-            let center_y = params[2];
-            let radius = diameter / 2.0;
-
-            // 36-sided polygon (10 degree increments)
-            let segments = 36;
-            let mut vertices = Vec::with_capacity(segments);
-            for i in 0..segments {
-                let angle = (i as f32) * (2.0 * std::f32::consts::PI / segments as f32);
-                vertices.push([
-                    center_x + radius * angle.cos(),
-                    center_y + radius * angle.sin(),
-                ]);
-            }
-
-            // Single contour (outer boundary only)
-            Some(vec![vertices])
-        }
-
-        4 => {
-            // Outline: exposure, vertices, x1, y1, x2, y2, ..., xn, yn, [rotation]
-            if params.len() < 3 {
-                return None;
-            }
-            let num_vertices = params[0] as usize;
-            if params.len() < 1 + num_vertices * 2 {
-                return None;
-            }
-
-            let mut vertices = Vec::with_capacity(num_vertices);
-            for i in 0..num_vertices {
-                let x = params[1 + i * 2];
-                let y = params[1 + i * 2 + 1];
-                vertices.push([x, y]);
-            }
-
-            // Single contour (outline is already a closed polygon)
-            Some(vec![vertices])
-        }
-
-        5 => {
-            // Polygon: exposure, vertices, centerX, centerY, diameter, [rotation]
-            if params.len() < 4 {
-                return None;
-            }
-            let num_vertices = params[0] as usize;
-            let center_x = params[1];
-            let center_y = params[2];
-            let diameter = params[3];
-            let radius = diameter / 2.0;
-
-            let mut vertices = Vec::with_capacity(num_vertices);
-            let angle_step = 2.0 * std::f32::consts::PI / num_vertices as f32;
-
-            for i in 0..num_vertices {
-                let angle = angle_step * i as f32;
-                vertices.push([
-                    center_x + radius * angle.cos(),
-                    center_y + radius * angle.sin(),
-                ]);
-            }
-
-            // Single contour (regular polygon)
-            Some(vec![vertices])
-        }
-
-        7 => {
-            // Thermal: centerX, centerY, outerDiameter, innerDiameter, gapThickness, [rotation]
-            // Note: Thermals don't have exposure parameter (always positive)
-            if params.len() < 5 {
-                return None;
-            }
-            let center_x = params[0];
-            let center_y = params[1];
-            let outer_diameter = params[2];
-            let inner_diameter = params[3];
-            let gap_thickness = params[4];
-            let rotation = if params.len() > 5 {
-                params[5] * (std::f32::consts::PI / 180.0) // degrees to radians
-            } else {
-                0.0
-            };
-
-            let outer_radius = outer_diameter / 2.0;
-            let inner_radius = inner_diameter / 2.0;
-            let half_gap = gap_thickness / 2.0;
-
-            // Outer circle (36-sided polygon, counterclockwise)
-            let segments = 36;
-            let mut outer_contour = Vec::with_capacity(segments);
-            for i in 0..segments {
-                let angle = (i as f32) * (2.0 * std::f32::consts::PI / segments as f32);
-                let x = center_x + outer_radius * angle.cos();
-                let y = center_y + outer_radius * angle.sin();
-
-                // Apply rotation
-                if rotation != 0.0 {
-                    let dx = x - center_x;
-                    let dy = y - center_y;
-                    outer_contour.push([
-                        center_x + dx * rotation.cos() - dy * rotation.sin(),
-                        center_y + dx * rotation.sin() + dy * rotation.cos(),
-                    ]);
-                } else {
-                    outer_contour.push([x, y]);
-                }
-            }
-
-            // Inner circle (36-sided polygon, clockwise for hole)
-            let mut inner_contour = Vec::with_capacity(segments);
-            for i in (0..segments).rev() {
-                let angle = (i as f32) * (2.0 * std::f32::consts::PI / segments as f32);
-                let x = center_x + inner_radius * angle.cos();
-                let y = center_y + inner_radius * angle.sin();
-
-                // Apply rotation
-                if rotation != 0.0 {
-                    let dx = x - center_x;
-                    let dy = y - center_y;
-                    inner_contour.push([
-                        center_x + dx * rotation.cos() - dy * rotation.sin(),
-                        center_y + dx * rotation.sin() + dy * rotation.cos(),
-                    ]);
-                } else {
-                    inner_contour.push([x, y]);
-                }
-            }
-
-            // Four gap rectangles (clockwise for holes)
-            // Gap 1: vertical gap (top-bottom)
-            let gap1 = vec![
-                [center_x - half_gap, center_y + outer_radius],
-                [center_x - half_gap, center_y - outer_radius],
-                [center_x + half_gap, center_y - outer_radius],
-                [center_x + half_gap, center_y + outer_radius],
-            ];
-
-            // Gap 2: horizontal gap (left-right)
-            let gap2 = vec![
-                [center_x - outer_radius, center_y - half_gap],
-                [center_x - outer_radius, center_y + half_gap],
-                [center_x + outer_radius, center_y + half_gap],
-                [center_x + outer_radius, center_y - half_gap],
-            ];
-
-            // Apply rotation to gaps if needed
-            let apply_rotation_to_contour = |contour: Vec<[f32; 2]>| -> Vec<[f32; 2]> {
-                if rotation != 0.0 {
-                    contour
-                        .iter()
-                        .map(|&[x, y]| {
-                            let dx = x - center_x;
-                            let dy = y - center_y;
-                            [
-                                center_x + dx * rotation.cos() - dy * rotation.sin(),
-                                center_y + dx * rotation.sin() + dy * rotation.cos(),
-                            ]
-                        })
-                        .collect()
-                } else {
-                    contour
-                }
-            };
-
-            let gap1_rotated = apply_rotation_to_contour(gap1);
-            let gap2_rotated = apply_rotation_to_contour(gap2);
-
-            // Return: outer + inner + 2 gaps
-            Some(vec![
-                outer_contour, // Contour 0: outer (CCW)
-                inner_contour, // Contour 1: inner hole (CW)
-                gap1_rotated,  // Contour 2: vertical gap (CW)
-                gap2_rotated,  // Contour 3: horizontal gap (CW)
-            ])
-        }
-
-        20 => {
-            // Vector Line: exposure, width, startX, startY, endX, endY, [rotation]
-            if params.len() < 5 {
-                return None;
-            }
-            let width = params[0];
-            let start_x = params[1];
-            let start_y = params[2];
-            let end_x = params[3];
-            let end_y = params[4];
-
-            // Calculate perpendicular offset for line width
-            let dx = end_x - start_x;
-            let dy = end_y - start_y;
-            let length = (dx * dx + dy * dy).sqrt();
-
-            if length < 1e-6 {
-                return None;
-            }
-
-            let half_width = width / 2.0;
-            let perp_x = -dy / length * half_width;
-            let perp_y = dx / length * half_width;
-
-            // Rectangle vertices (counterclockwise)
-            let vertices = vec![
-                [start_x + perp_x, start_y + perp_y],
-                [end_x + perp_x, end_y + perp_y],
-                [end_x - perp_x, end_y - perp_y],
-                [start_x - perp_x, start_y - perp_y],
-            ];
-
-            Some(vec![vertices])
-        }
-
-        21 => {
-            // Center Line: exposure, width, height, centerX, centerY, [rotation]
-            if params.len() < 4 {
-                return None;
-            }
-            let width = params[0];
-            let height = params[1];
-            let center_x = params[2];
-            let center_y = params[3];
-
-            let half_width = width / 2.0;
-            let half_height = height / 2.0;
-
-            // Rectangle vertices (counterclockwise)
-            let vertices = vec![
-                [center_x - half_width, center_y - half_height],
-                [center_x + half_width, center_y - half_height],
-                [center_x + half_width, center_y + half_height],
-                [center_x - half_width, center_y + half_height],
-            ];
-
-            Some(vec![vertices])
-        }
-
-        _ => None,
-    }
-}
-
 /// Convert a primitive to a polygon (outer boundary as Vec<[f32; 2]>)
 fn primitive_to_polygon(primitive: &Primitive) -> Vec<[f32; 2]> {
     match primitive {
@@ -760,108 +456,10 @@ fn primitive_to_polygon(primitive: &Primitive) -> Vec<[f32; 2]> {
     }
 }
 
-/// Apply sequential boolean operations to primitives with iOverlay
-/// Returns triangulated result as a single Primitive::Triangle
-#[allow(dead_code)]
-fn apply_boolean_operations(primitives: &[Primitive]) -> Option<Primitive> {
-    if primitives.is_empty() {
-        return None;
-    }
-
-    // Convert all primitives to polygons with their exposure values
-    let polygons: Vec<(Vec<[f32; 2]>, f32)> = primitives
-        .iter()
-        .map(|p| {
-            let poly = primitive_to_polygon(p);
-            let exposure = match p {
-                Primitive::Circle { exposure, .. } => *exposure,
-                Primitive::Triangle { exposure, .. } => *exposure,
-                Primitive::Arc { exposure, .. } => *exposure,
-                Primitive::Thermal { exposure, .. } => *exposure,
-            };
-            (poly, exposure)
-        })
-        .collect();
-
-    // Start with first polygon as base
-    let (first_poly, first_exposure) = &polygons[0];
-
-    // If first polygon is negative, we can't start with it
-    if *first_exposure < 0.5 {
-        return None;
-    }
-
-    // Start with first positive polygon
-    let mut result_shapes: Vec<Vec<Vec<[f32; 2]>>> = vec![vec![first_poly.clone()]];
-
-    // Sequentially apply boolean operations
-    for (poly, exposure) in polygons.iter().skip(1) {
-        if poly.is_empty() {
-            continue;
-        }
-
-        let clip_shape = vec![poly.clone()];
-
-        if *exposure > 0.5 {
-            // Positive: UNION with existing result
-            result_shapes =
-                result_shapes.overlay(&clip_shape, OverlayRule::Union, FillRule::NonZero);
-        } else {
-            // Negative: DIFFERENCE from existing result
-            result_shapes =
-                result_shapes.overlay(&clip_shape, OverlayRule::Difference, FillRule::NonZero);
-        }
-
-        if result_shapes.is_empty() {
-            return None;
-        }
-    }
-
-    // Flatten result back to a single polygon
-    // iOverlay returns Vec<Shape> where Shape is Vec<Contour> and Contour is Vec<Point>
-    if result_shapes.is_empty() {
-        return None;
-    }
-
-    // Take the first shape and concatenate all its contours
-    let flattened_polygon: Vec<[f32; 2]> = result_shapes
-        .iter()
-        .flat_map(|shape| shape.iter().flat_map(|contour| contour.iter().copied()))
-        .collect();
-
-    if flattened_polygon.is_empty() {
-        return None;
-    }
-
-    // Triangulate using i_triangle
-    match triangulate_outline(&flattened_polygon, 1.0) {
-        Ok(triangles) => {
-            // Combine all triangles into a single Triangle primitive
-            let all_vertices: Vec<[f32; 2]> = triangles
-                .iter()
-                .flat_map(|tri| match tri {
-                    Primitive::Triangle { vertices, .. } => vertices.clone(),
-                    _ => Vec::new(),
-                })
-                .collect();
-
-            if all_vertices.is_empty() {
-                None
-            } else {
-                Some(Primitive::Triangle {
-                    vertices: all_vertices,
-                    exposure: 1.0, // Final result is always positive
-                })
-            }
-        }
-        Err(_) => None,
-    }
-}
-
 /// Apply sequential boolean operations to shapes (new version using Shape format)
 /// Input: Vec<(Shape, exposure)> where Shape is Vec<Contour> and Contour is Vec<Point>
 /// Returns: Vec<Primitive::Triangle> with all triangulated results
-fn apply_boolean_operations_v2(shapes: &[(Vec<Vec<[f32; 2]>>, f32)]) -> Vec<Primitive> {
+fn apply_boolean_operations(shapes: &[(Vec<Vec<[f32; 2]>>, f32)]) -> Vec<Primitive> {
     if shapes.is_empty() {
         return Vec::new();
     }
@@ -1309,18 +907,14 @@ fn parse_primitive_statement(
 /// Aperture definition (Circle, Rectangle, Obround, Polygon, or Macro reference)
 #[derive(Clone, Debug)]
 pub struct Aperture {
-    pub code: String,
-    pub shape: String, // C, R, O, P, or macro name
     pub radius: f32,
     pub primitives: Vec<Primitive>, // Aperture contains multiple basic primitives
     pub has_negative: bool,         // true if primitives contain exposure=0
 }
 
 impl Aperture {
-    pub fn new(code: String, shape: String, radius: f32) -> Self {
+    pub fn new(radius: f32) -> Self {
         Aperture {
-            code,
-            shape,
             radius,
             primitives: Vec::new(),
             has_negative: false,
@@ -1383,175 +977,6 @@ impl ApertureMacro {
         }
 
         primitives
-    }
-
-    /// Convert macro primitives directly to iOverlay Shape format
-    /// Returns: Vec<(Shape, exposure)> where Shape is Vec<Contour>
-    #[allow(dead_code)]
-    pub fn instantiate_as_shapes(&self, params: &[f32]) -> Vec<(Vec<Vec<[f32; 2]>>, f32)> {
-        let mut shapes = Vec::new();
-        let mut variables: HashMap<String, f32> = HashMap::new();
-
-        // Initialize parameters as $1, $2, ...
-        for (i, &param) in params.iter().enumerate() {
-            variables.insert(format!("${}", i + 1), param);
-        }
-
-        for statement in &self.statements {
-            let stmt = statement.trim();
-            if stmt.is_empty() {
-                continue;
-            }
-
-            // Skip comments: "0 " or just "0"
-            if stmt.starts_with("0 ") || stmt == "0" {
-                continue;
-            }
-
-            // Variable assignment: $5=$1/2
-            if stmt.starts_with('$') && stmt.contains('=') {
-                if let Some(eq_idx) = stmt.find('=') {
-                    let var_name = stmt[..eq_idx].trim().to_string();
-                    let expr = stmt[eq_idx + 1..].trim();
-
-                    if let Ok(value) = evaluate_expression(expr, &variables) {
-                        variables.insert(var_name, value);
-                    }
-                }
-            } else {
-                // Primitive statement: code,exposure,...
-                let stmt = stmt.trim_end_matches('*');
-                let parts: Vec<&str> = stmt.split(',').collect();
-
-                if parts.is_empty() {
-                    continue;
-                }
-
-                // Parse primitive code
-                let code: u32 = match parts[0].parse() {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
-
-                // Skip comment code
-                if code == 0 {
-                    continue;
-                }
-
-                // Extract exposure (for primitives that have it)
-                let exposure: f32 = if code == 7 {
-                    // Thermal doesn't have exposure parameter
-                    1.0
-                } else if parts.len() > 1 {
-                    evaluate_expression(parts[1], &variables).unwrap_or(1.0)
-                } else {
-                    1.0
-                };
-
-                // Extract parameters based on primitive type
-                let mut params_list = Vec::new();
-
-                match code {
-                    1 => {
-                        // Circle: exposure, diameter, centerX, centerY, [rotation]
-                        if parts.len() >= 5 {
-                            if let Ok(diameter) = evaluate_expression(parts[2], &variables) {
-                                params_list.push(diameter);
-                            }
-                            if let Ok(center_x) = evaluate_expression(parts[3], &variables) {
-                                params_list.push(center_x);
-                            }
-                            if let Ok(center_y) = evaluate_expression(parts[4], &variables) {
-                                params_list.push(center_y);
-                            }
-                        }
-                    }
-                    4 => {
-                        // Outline: exposure, vertices, x1, y1, ..., [rotation]
-                        if parts.len() >= 3 {
-                            if let Ok(num_vertices) = evaluate_expression(parts[2], &variables) {
-                                params_list.push(num_vertices);
-                                let num_verts = num_vertices as usize;
-                                for i in 0..num_verts {
-                                    let x_idx = 3 + i * 2;
-                                    let y_idx = 3 + i * 2 + 1;
-                                    if x_idx < parts.len() && y_idx < parts.len() {
-                                        if let Ok(x) = evaluate_expression(parts[x_idx], &variables)
-                                        {
-                                            params_list.push(x);
-                                        }
-                                        if let Ok(y) = evaluate_expression(parts[y_idx], &variables)
-                                        {
-                                            params_list.push(y);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    5 => {
-                        // Polygon: exposure, vertices, centerX, centerY, diameter, [rotation]
-                        if parts.len() >= 6 {
-                            if let Ok(num_vertices) = evaluate_expression(parts[2], &variables) {
-                                params_list.push(num_vertices);
-                            }
-                            if let Ok(center_x) = evaluate_expression(parts[3], &variables) {
-                                params_list.push(center_x);
-                            }
-                            if let Ok(center_y) = evaluate_expression(parts[4], &variables) {
-                                params_list.push(center_y);
-                            }
-                            if let Ok(diameter) = evaluate_expression(parts[5], &variables) {
-                                params_list.push(diameter);
-                            }
-                        }
-                    }
-                    7 => {
-                        // Thermal: centerX, centerY, outerDiameter, innerDiameter, gapThickness, [rotation]
-                        if parts.len() >= 6 {
-                            for part in &parts[1..=5] {
-                                if let Ok(val) = evaluate_expression(part, &variables) {
-                                    params_list.push(val);
-                                }
-                            }
-                            if parts.len() > 6 {
-                                if let Ok(rotation) = evaluate_expression(parts[6], &variables) {
-                                    params_list.push(rotation);
-                                }
-                            }
-                        }
-                    }
-                    20 => {
-                        // Vector Line: exposure, width, startX, startY, endX, endY, [rotation]
-                        if parts.len() >= 7 {
-                            for part in &parts[2..=6] {
-                                if let Ok(val) = evaluate_expression(part, &variables) {
-                                    params_list.push(val);
-                                }
-                            }
-                        }
-                    }
-                    21 => {
-                        // Center Line: exposure, width, height, centerX, centerY, [rotation]
-                        if parts.len() >= 6 {
-                            for part in &parts[2..=5] {
-                                if let Ok(val) = evaluate_expression(part, &variables) {
-                                    params_list.push(val);
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-
-                // Convert primitive to shape
-                if let Some(shape) = macro_primitive_to_shape(code, &params_list, exposure) {
-                    shapes.push((shape, exposure));
-                }
-            }
-        }
-
-        shapes
     }
 }
 
@@ -1617,8 +1042,6 @@ pub struct FormatSpec {
     pub x_decimal_digits: u32,
     pub y_integer_digits: u32,
     pub y_decimal_digits: u32,
-    pub leading: u32,
-    pub trailing: u32,
     // Cached calculation values - performance optimization
     pub x_divisor: f64,      // 10^(x_decimal_digits)
     pub y_divisor: f64,      // 10^(y_decimal_digits)
@@ -1633,8 +1056,6 @@ impl Default for FormatSpec {
             x_decimal_digits: 4,
             y_integer_digits: 2,
             y_decimal_digits: 4,
-            leading: 2,
-            trailing: 4,
             x_divisor: 10000.0, // 10^4
             y_divisor: 10000.0, // 10^4
             x_total_digits: 6,  // 2 + 4
@@ -1653,8 +1074,6 @@ pub struct GerberParser {
     pub negative_layers: Vec<Vec<Primitive>>,
     pub current_primitives: Vec<Primitive>, // Accumulating primitives for current polarity
     pub region_contours: Vec<Vec<[f32; 2]>>, // Contour points collected in Region mode
-    pub units: String,
-    pub format_spec: FormatSpec,
 }
 
 impl GerberParser {
@@ -1668,8 +1087,6 @@ impl GerberParser {
             negative_layers: Vec::new(),
             current_primitives: Vec::new(),
             region_contours: Vec::new(),
-            units: "mm".to_string(),
-            format_spec: FormatSpec::default(),
         }
     }
 
@@ -1916,6 +1333,7 @@ impl GerberParser {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn parse_command(
     line_ref: &str,
     i: &mut usize,
@@ -2301,7 +1719,7 @@ fn flash_aperture(
                         .collect();
 
                     // Apply boolean operations with hole preservation
-                    let result_primitives = apply_boolean_operations_v2(&shapes_with_exposure);
+                    let result_primitives = apply_boolean_operations(&shapes_with_exposure);
                     primitives.extend(result_primitives);
                 } else {
                     // Direct primitive cloning
@@ -2442,7 +1860,9 @@ fn execute_interpolation(
                     }
 
                     // Clamp single-quadrant sweep angle to ±90 degrees
-                    if state.quadrant_mode == "single" && sweep_angle.abs() > std::f32::consts::PI / 2.0 + 0.001 {
+                    if state.quadrant_mode == "single"
+                        && sweep_angle.abs() > std::f32::consts::PI / 2.0 + 0.001
+                    {
                         if is_clockwise {
                             sweep_angle = -std::f32::consts::PI / 2.0;
                         } else {
@@ -2567,7 +1987,7 @@ fn parse_aperture(
     }
 
     let shape = shape_and_params[0].trim().to_string();
-    let mut aperture = Aperture::new(code.clone(), shape.clone(), 0.0);
+    let mut aperture = Aperture::new(0.0);
 
     // Process basic Aperture formats (C, R, O, P)
     match shape.as_str() {
@@ -2796,55 +2216,6 @@ fn parse_aperture(
 pub fn parse_gerber(data: &str) -> Result<Vec<GerberData>, JsValue> {
     let mut parser = GerberParser::new();
     parser.parse(data)
-}
-
-/// Test: Evaluate expression with negative numbers
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_negative_numbers() {
-        let mut vars = HashMap::new();
-        vars.insert("$1".to_string(), 5.0);
-        vars.insert("$2".to_string(), -2.0);
-        vars.insert("$3".to_string(), 3.0);
-
-        // $1 - $2 where $2 = -2 → 5 - (-2) = 7
-        let result = evaluate_expression("$1-$2", &vars);
-        println!("$1-$2 (where $1=5, $2=-2) = {:?}", result);
-        assert_eq!(result, Ok(7.0));
-
-        // $1 + $2 where $2 = -2 → 5 + (-2) = 3
-        let result = evaluate_expression("$1+$2", &vars);
-        println!("$1+$2 (where $1=5, $2=-2) = {:?}", result);
-        assert_eq!(result, Ok(3.0));
-
-        // $2 * $3 where $2 = -2, $3 = 3 → -2 * 3 = -6
-        let result = evaluate_expression("$2X$3", &vars);
-        println!("$2X$3 (where $2=-2, $3=3) = {:?}", result);
-        assert_eq!(result, Ok(-6.0));
-
-        // Direct negative number: -5 + 3 = -2
-        let result = evaluate_expression("-5+3", &vars);
-        println!("-5+3 = {:?}", result);
-        assert_eq!(result, Ok(-2.0));
-
-        // Multiple operations: $1 - $2 + $3 = 5 - (-2) + 3 = 10
-        let result = evaluate_expression("$1-$2+$3", &vars);
-        println!("$1-$2+$3 (where $1=5, $2=-2, $3=3) = {:?}", result);
-        assert_eq!(result, Ok(10.0));
-
-        // Negative variable at start: $2 - 1 = -2 - 1 = -3
-        let result = evaluate_expression("$2-1", &vars);
-        println!("$2-1 (where $2=-2) = {:?}", result);
-        assert_eq!(result, Ok(-3.0));
-
-        // Expression: -$1 + $2 = -5 + (-2) = -7
-        let result = evaluate_expression("-$1+$2", &vars);
-        println!("-$1+$2 (where $1=5, $2=-2) = {:?}", result);
-        assert_eq!(result, Ok(-7.0));
-    }
 }
 
 /// Parse Format specification - %FSLAX24Y24*%
