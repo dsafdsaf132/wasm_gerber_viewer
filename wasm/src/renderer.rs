@@ -820,6 +820,9 @@ impl Renderer {
         self.gl
             .draw_elements_with_i32(TRIANGLES, triangles.indices.len() as i32, UNSIGNED_INT, 0);
 
+        // Unbind VAO to prevent state leakage
+        self.gl.bind_vertex_array(None);
+
         Ok(())
     }
 
@@ -931,6 +934,9 @@ impl Renderer {
         // Draw
         self.gl
             .draw_arrays_instanced(TRIANGLES, 0, 6, instance_count as i32);
+
+        // Unbind VAO to prevent state leakage
+        self.gl.bind_vertex_array(None);
 
         Ok(())
     }
@@ -1097,6 +1103,9 @@ impl Renderer {
         // Draw
         self.gl
             .draw_arrays_instanced(TRIANGLES, 0, 6, instance_count as i32);
+
+        // Unbind VAO to prevent state leakage
+        self.gl.bind_vertex_array(None);
 
         Ok(())
     }
@@ -1266,6 +1275,9 @@ impl Renderer {
         // Draw
         self.gl
             .draw_arrays_instanced(TRIANGLES, 0, 6, instance_count as i32);
+
+        // Unbind VAO to prevent state leakage
+        self.gl.bind_vertex_array(None);
 
         Ok(())
     }
