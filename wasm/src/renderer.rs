@@ -299,6 +299,7 @@ struct Fbo {
 }
 
 /// Buffer cache for geometry rendering (per polarity sublayer)
+#[derive(Default)]
 struct BufferCache {
     // Triangles cache
     triangle_vao: Option<WebGlVertexArrayObject>,
@@ -651,6 +652,62 @@ impl Renderer {
         })
     }
 
+    /// Create and bind a single-channel instance buffer
+    fn create_instance_buffer(
+        gl: &WebGl2RenderingContext,
+        data: &[f32],
+        program: &ShaderProgram,
+        attr_name: &str,
+        divisor: u32,
+    ) -> Result<WebGlBuffer, JsValue> {
+        let buffer = gl
+            .create_buffer()
+            .ok_or_else(|| JsValue::from_str("Failed to create buffer"))?;
+        gl.bind_buffer(ARRAY_BUFFER, Some(&buffer));
+        unsafe {
+            let array = Float32Array::view(data);
+            gl.buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
+        }
+        let loc = *program.attributes.get(attr_name).unwrap();
+        gl.enable_vertex_attrib_array(loc);
+        gl.vertex_attrib_pointer_with_i32(loc, 1, FLOAT, false, 0, 0);
+        gl.vertex_attrib_divisor(loc, divisor);
+        Ok(buffer)
+    }
+
+    /// Create and bind a dual-channel (2D) instance buffer
+    fn create_instance_buffer_2d(
+        gl: &WebGl2RenderingContext,
+        data: &[f32],
+        program: &ShaderProgram,
+        attr_name: &str,
+        divisor: u32,
+    ) -> Result<WebGlBuffer, JsValue> {
+        let buffer = gl
+            .create_buffer()
+            .ok_or_else(|| JsValue::from_str("Failed to create buffer"))?;
+        gl.bind_buffer(ARRAY_BUFFER, Some(&buffer));
+        unsafe {
+            let array = Float32Array::view(data);
+            gl.buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
+        }
+        let loc = *program.attributes.get(attr_name).unwrap();
+        gl.enable_vertex_attrib_array(loc);
+        gl.vertex_attrib_pointer_with_i32(loc, 2, FLOAT, false, 0, 0);
+        gl.vertex_attrib_divisor(loc, divisor);
+        Ok(buffer)
+    }
+
+    /// Interleave x,y arrays into a single flat array
+    fn interleave_xy(x: &[f32], y: &[f32]) -> Vec<f32> {
+        let mut result = Vec::with_capacity(x.len() * 2);
+        for i in 0..x.len() {
+            result.push(x[i]);
+            result.push(y[i]);
+        }
+        result
+    }
+
     /// Create quad buffer for instanced rendering
     fn create_quad_buffer(gl: &WebGl2RenderingContext) -> Result<WebGlBuffer, JsValue> {
         let vertices: [f32; 12] = [
@@ -868,46 +925,10 @@ impl Renderer {
             self.gl
                 .vertex_attrib_pointer_with_i32(position_loc, 2, FLOAT, false, 0, 0);
 
-            // Create interleaved centers array [x1, y1, x2, y2, ...]
-            let mut centers = Vec::with_capacity(instance_count * 2);
-            for i in 0..instance_count {
-                centers.push(circles.x[i]);
-                centers.push(circles.y[i]);
-            }
-
-            // Create and bind center buffer
-            let center_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create center buffer"))?;
-            self.gl.bind_buffer(ARRAY_BUFFER, Some(&center_buffer));
-            unsafe {
-                let array = Float32Array::view(&centers);
-                self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
-            }
-            let center_loc = *program.attributes.get("center_instance").unwrap();
-            self.gl.enable_vertex_attrib_array(center_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(center_loc, 2, FLOAT, false, 0, 0);
-            self.gl.vertex_attrib_divisor(center_loc, 1);
-
-            // Create and bind radius buffer
-            let radius_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create radius buffer"))?;
-            self.gl.bind_buffer(ARRAY_BUFFER, Some(&radius_buffer));
-            unsafe {
-                let array = Float32Array::view(&circles.radius);
-                self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
-            }
-            let radius_loc = *program.attributes.get("radius_instance").unwrap();
-            self.gl.enable_vertex_attrib_array(radius_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(radius_loc, 1, FLOAT, false, 0, 0);
-            self.gl.vertex_attrib_divisor(radius_loc, 1);
+            // Create instance buffers
+            let centers = Self::interleave_xy(&circles.x, &circles.y);
+            let center_buffer = Self::create_instance_buffer_2d(&self.gl, &centers, program, "center_instance", 1)?;
+            let radius_buffer = Self::create_instance_buffer(&self.gl, &circles.radius, program, "radius_instance", 1)?;
 
             // Unbind VAO
             self.gl.bind_vertex_array(None);
@@ -988,97 +1009,13 @@ impl Renderer {
             self.gl
                 .vertex_attrib_pointer_with_i32(position_loc, 2, FLOAT, false, 0, 0);
 
-            // Create interleaved centers array [x1, y1, x2, y2, ...]
-            let mut centers = Vec::with_capacity(instance_count * 2);
-            for i in 0..instance_count {
-                centers.push(arcs.x[i]);
-                centers.push(arcs.y[i]);
-            }
-
-            // Create and bind center buffer
-            let center_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create center buffer"))?;
-            self.gl.bind_buffer(ARRAY_BUFFER, Some(&center_buffer));
-            unsafe {
-                let array = Float32Array::view(&centers);
-                self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
-            }
-            let center_loc = *program.attributes.get("center_instance").unwrap();
-            self.gl.enable_vertex_attrib_array(center_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(center_loc, 2, FLOAT, false, 0, 0);
-            self.gl.vertex_attrib_divisor(center_loc, 1);
-
-            // Create and bind radius buffer
-            let radius_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create radius buffer"))?;
-            self.gl.bind_buffer(ARRAY_BUFFER, Some(&radius_buffer));
-            unsafe {
-                let array = Float32Array::view(&arcs.radius);
-                self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
-            }
-            let radius_loc = *program.attributes.get("radius_instance").unwrap();
-            self.gl.enable_vertex_attrib_array(radius_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(radius_loc, 1, FLOAT, false, 0, 0);
-            self.gl.vertex_attrib_divisor(radius_loc, 1);
-
-            // Create and bind start angle buffer
-            let start_angle_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create start angle buffer"))?;
-            self.gl.bind_buffer(ARRAY_BUFFER, Some(&start_angle_buffer));
-            unsafe {
-                let array = Float32Array::view(&arcs.start_angle);
-                self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
-            }
-            let start_angle_loc = *program.attributes.get("startAngle_instance").unwrap();
-            self.gl.enable_vertex_attrib_array(start_angle_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(start_angle_loc, 1, FLOAT, false, 0, 0);
-            self.gl.vertex_attrib_divisor(start_angle_loc, 1);
-
-            // Create and bind sweep angle buffer
-            let sweep_angle_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create sweep angle buffer"))?;
-            self.gl.bind_buffer(ARRAY_BUFFER, Some(&sweep_angle_buffer));
-            unsafe {
-                let array = Float32Array::view(&arcs.sweep_angle);
-                self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
-            }
-            let sweep_angle_loc = *program.attributes.get("sweepAngle_instance").unwrap();
-            self.gl.enable_vertex_attrib_array(sweep_angle_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(sweep_angle_loc, 1, FLOAT, false, 0, 0);
-            self.gl.vertex_attrib_divisor(sweep_angle_loc, 1);
-
-            // Create and bind thickness buffer
-            let thickness_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create thickness buffer"))?;
-            self.gl.bind_buffer(ARRAY_BUFFER, Some(&thickness_buffer));
-            unsafe {
-                let array = Float32Array::view(&arcs.thickness);
-                self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
-            }
-            let thickness_loc = *program.attributes.get("thickness_instance").unwrap();
-            self.gl.enable_vertex_attrib_array(thickness_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(thickness_loc, 1, FLOAT, false, 0, 0);
-            self.gl.vertex_attrib_divisor(thickness_loc, 1);
+            // Create instance buffers
+            let centers = Self::interleave_xy(&arcs.x, &arcs.y);
+            let center_buffer = Self::create_instance_buffer_2d(&self.gl, &centers, program, "center_instance", 1)?;
+            let radius_buffer = Self::create_instance_buffer(&self.gl, &arcs.radius, program, "radius_instance", 1)?;
+            let start_angle_buffer = Self::create_instance_buffer(&self.gl, &arcs.start_angle, program, "startAngle_instance", 1)?;
+            let sweep_angle_buffer = Self::create_instance_buffer(&self.gl, &arcs.sweep_angle, program, "sweepAngle_instance", 1)?;
+            let thickness_buffer = Self::create_instance_buffer(&self.gl, &arcs.thickness, program, "thickness_instance", 1)?;
 
             // Unbind VAO
             self.gl.bind_vertex_array(None);
@@ -1162,100 +1099,13 @@ impl Renderer {
             self.gl
                 .vertex_attrib_pointer_with_i32(position_loc, 2, FLOAT, false, 0, 0);
 
-            // Create interleaved centers array [x1, y1, x2, y2, ...]
-            let mut centers = Vec::with_capacity(instance_count * 2);
-            for i in 0..instance_count {
-                centers.push(thermals.x[i]);
-                centers.push(thermals.y[i]);
-            }
-
-            // Create and bind center buffer
-            let center_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create center buffer"))?;
-            self.gl.bind_buffer(ARRAY_BUFFER, Some(&center_buffer));
-            unsafe {
-                let array = Float32Array::view(&centers);
-                self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
-            }
-            let center_loc = *program.attributes.get("center_instance").unwrap();
-            self.gl.enable_vertex_attrib_array(center_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(center_loc, 2, FLOAT, false, 0, 0);
-            self.gl.vertex_attrib_divisor(center_loc, 1);
-
-            // Create and bind outer_diameter buffer
-            let outer_diameter_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create outer_diameter buffer"))?;
-            self.gl
-                .bind_buffer(ARRAY_BUFFER, Some(&outer_diameter_buffer));
-            unsafe {
-                let array = Float32Array::view(&thermals.outer_diameter);
-                self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
-            }
-            let outer_diameter_loc = *program.attributes.get("outer_diameter_instance").unwrap();
-            self.gl.enable_vertex_attrib_array(outer_diameter_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(outer_diameter_loc, 1, FLOAT, false, 0, 0);
-            self.gl.vertex_attrib_divisor(outer_diameter_loc, 1);
-
-            // Create and bind inner_diameter buffer
-            let inner_diameter_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create inner_diameter buffer"))?;
-            self.gl
-                .bind_buffer(ARRAY_BUFFER, Some(&inner_diameter_buffer));
-            unsafe {
-                let array = Float32Array::view(&thermals.inner_diameter);
-                self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
-            }
-            let inner_diameter_loc = *program.attributes.get("inner_diameter_instance").unwrap();
-            self.gl.enable_vertex_attrib_array(inner_diameter_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(inner_diameter_loc, 1, FLOAT, false, 0, 0);
-            self.gl.vertex_attrib_divisor(inner_diameter_loc, 1);
-
-            // Create and bind gap_thickness buffer
-            let gap_thickness_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create gap_thickness buffer"))?;
-            self.gl
-                .bind_buffer(ARRAY_BUFFER, Some(&gap_thickness_buffer));
-            unsafe {
-                let array = Float32Array::view(&thermals.gap_thickness);
-                self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
-            }
-            let gap_thickness_loc = *program.attributes.get("gap_thickness_instance").unwrap();
-            self.gl.enable_vertex_attrib_array(gap_thickness_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(gap_thickness_loc, 1, FLOAT, false, 0, 0);
-            self.gl.vertex_attrib_divisor(gap_thickness_loc, 1);
-
-            // Create and bind rotation buffer
-            let rotation_buffer = self
-                .gl
-                .create_buffer()
-                .ok_or_else(|| JsValue::from_str("Failed to create rotation buffer"))?;
-            self.gl.bind_buffer(ARRAY_BUFFER, Some(&rotation_buffer));
-            unsafe {
-                let array = Float32Array::view(&thermals.rotation);
-                self.gl
-                    .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
-            }
-            let rotation_loc = *program.attributes.get("rotation_instance").unwrap();
-            self.gl.enable_vertex_attrib_array(rotation_loc);
-            self.gl
-                .vertex_attrib_pointer_with_i32(rotation_loc, 1, FLOAT, false, 0, 0);
-            self.gl.vertex_attrib_divisor(rotation_loc, 1);
+            // Create instance buffers
+            let centers = Self::interleave_xy(&thermals.x, &thermals.y);
+            let center_buffer = Self::create_instance_buffer_2d(&self.gl, &centers, program, "center_instance", 1)?;
+            let outer_diameter_buffer = Self::create_instance_buffer(&self.gl, &thermals.outer_diameter, program, "outer_diameter_instance", 1)?;
+            let inner_diameter_buffer = Self::create_instance_buffer(&self.gl, &thermals.inner_diameter, program, "inner_diameter_instance", 1)?;
+            let gap_thickness_buffer = Self::create_instance_buffer(&self.gl, &thermals.gap_thickness, program, "gap_thickness_instance", 1)?;
+            let rotation_buffer = Self::create_instance_buffer(&self.gl, &thermals.rotation, program, "rotation_instance", 1)?;
 
             // Unbind VAO
             self.gl.bind_vertex_array(None);
