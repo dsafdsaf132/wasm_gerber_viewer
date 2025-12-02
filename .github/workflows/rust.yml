@@ -52,7 +52,7 @@ jobs:
 
     - name: Build WASM module
       working-directory: ./wasm
-      run: wasm-pack build --target web --out-dir pkg --release
+      run: wasm-pack build --target web --out-dir pkg --dev
 
     - name: Run tests
       working-directory: ./wasm
