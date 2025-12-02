@@ -16,23 +16,28 @@ This project focuses on high-performance rendering, but it does not render accur
 
 As it is a Work In Progress, some Gerber syntax may not be fully supported.
 
+## Requirements
+
+- **Rust** - [Install Rust](https://rustup.rs/)
+- **wasm-pack** - Install via: `cargo install wasm-pack`
+- **Python 3** - For running the local HTTP server
+
 ## Quick Start
 
 ```bash
 git clone https://github.com/dsafdsaf132/wasm_gerber_viewer.git
 cd wasm_gerber_viewer
+
+# Build WASM module
+cd wasm
+wasm-pack build --target web --out-dir pkg --release
+cd ..
+
+# Start development server
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000` and upload files.
-
-## Build Instructions
-
-```bash
-# Build WASM module (requires Rust and wasm-pack)
-cd wasm
-wasm-pack build --target web --out-dir pkg --release
-```
+Open `http://localhost:8000` and upload Gerber files.
 
 ## Project Structure
 

@@ -25,5 +25,4 @@ Thumbs.db
 # WASM build artifacts
 wasm_gerber_processor/target/
 wasm/target
-
-!wasm/pkg/*
+wasm/pkg/
