@@ -1,38 +1,31 @@
 use wasm_bindgen::prelude::*;
 
 /// Triangle mesh data structure
-#[wasm_bindgen]
 pub struct Triangles {
     pub(crate) vertices: Vec<f32>,
     pub(crate) indices: Vec<u32>,
 }
 
-#[wasm_bindgen]
 impl Triangles {
-    #[wasm_bindgen(constructor)]
     pub fn new(vertices: Vec<f32>, indices: Vec<u32>) -> Triangles {
         Triangles { vertices, indices }
     }
 }
 
 /// Circle primitive data structure
-#[wasm_bindgen]
 pub struct Circles {
     pub(crate) x: Vec<f32>,
     pub(crate) y: Vec<f32>,
     pub(crate) radius: Vec<f32>,
 }
 
-#[wasm_bindgen]
 impl Circles {
-    #[wasm_bindgen(constructor)]
     pub fn new(x: Vec<f32>, y: Vec<f32>, radius: Vec<f32>) -> Circles {
         Circles { x, y, radius }
     }
 }
 
 /// Arc primitive data structure
-#[wasm_bindgen]
 pub struct Arcs {
     pub(crate) x: Vec<f32>,
     pub(crate) y: Vec<f32>,
@@ -42,9 +35,7 @@ pub struct Arcs {
     pub(crate) thickness: Vec<f32>,
 }
 
-#[wasm_bindgen]
 impl Arcs {
-    #[wasm_bindgen(constructor)]
     pub fn new(
         x: Vec<f32>,
         y: Vec<f32>,
@@ -65,7 +56,6 @@ impl Arcs {
 }
 
 /// Thermal primitive data structure
-#[wasm_bindgen]
 pub struct Thermals {
     pub(crate) x: Vec<f32>,
     pub(crate) y: Vec<f32>,
@@ -75,9 +65,7 @@ pub struct Thermals {
     pub(crate) rotation: Vec<f32>,
 }
 
-#[wasm_bindgen]
 impl Thermals {
-    #[wasm_bindgen(constructor)]
     pub fn new(
         x: Vec<f32>,
         y: Vec<f32>,
@@ -140,7 +128,6 @@ impl Boundary {
 }
 
 /// Container for all parsed Gerber data
-#[wasm_bindgen]
 pub struct GerberData {
     pub(crate) triangles: Triangles,
     pub(crate) circles: Circles,
@@ -149,9 +136,7 @@ pub struct GerberData {
     pub(crate) boundary: Boundary,
 }
 
-#[wasm_bindgen]
 impl GerberData {
-    #[wasm_bindgen(constructor)]
     pub fn new(
         triangles: Triangles,
         circles: Circles,

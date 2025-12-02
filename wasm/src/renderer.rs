@@ -299,11 +299,7 @@ struct Fbo {
 }
 
 /// Buffer cache for geometry rendering (per polarity sublayer)
-#[allow(dead_code)]
 struct BufferCache {
-    // Shared quad buffer for instanced rendering
-    quad_buffer: WebGlBuffer,
-
     // Triangles cache
     triangle_vao: Option<WebGlVertexArrayObject>,
     triangle_vertex_buffer: Option<WebGlBuffer>,
@@ -401,7 +397,6 @@ impl Renderer {
         let mut buffer_caches = Vec::new();
         for _ in 0..gerber_data.len() {
             buffer_caches.push(BufferCache {
-                quad_buffer: self.quad_buffer.clone(),
                 triangle_vao: None,
                 triangle_vertex_buffer: None,
                 triangle_index_buffer: None,

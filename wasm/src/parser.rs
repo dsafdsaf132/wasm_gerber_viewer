@@ -994,10 +994,6 @@ pub struct ParserState {
     pub unit_multiplier: f32, // 1.0 for mm, 25.4 for inch
     pub i: f32,
     pub j: f32,
-    #[allow(dead_code)]
-    pub previous_x: f32,
-    #[allow(dead_code)]
-    pub previous_y: f32,
     pub pen_state: String,
     pub polarity: Polarity,
     pub format_spec: FormatSpec,
@@ -1022,8 +1018,6 @@ impl Default for ParserState {
             unit_multiplier: 1.0, // Default to mm
             i: 0.0,
             j: 0.0,
-            previous_x: 0.0,
-            previous_y: 0.0,
             pen_state: "up".to_string(),
             polarity: Polarity::Positive,
             format_spec: FormatSpec::default(),
