@@ -20,6 +20,9 @@ export class GerberViewer {
     this.resizeHandle = document.getElementById("resize-handle");
     this.drawerToggleBtn = document.getElementById("drawer-toggle");
 
+    // Drop zone
+    this.dropZone = document.getElementById("drop-zone");
+
     // WASM module and single processor
     this.wasmModule = null;
     this.wasmProcessor = null;
@@ -188,6 +191,11 @@ export class GerberViewer {
       e.preventDefault();
       this.toggleDrawer();
     });
+
+    // File drop events
+    this.dropZone.addEventListener("dragover", (e) => this.handleDragOver(e));
+    this.dropZone.addEventListener("dragleave", (e) => this.handleDragLeave(e));
+    this.dropZone.addEventListener("drop", (e) => this.handleDrop(e));
   }
 
   async handleFileUpload(files) {
@@ -831,5 +839,27 @@ export class GerberViewer {
     requestAnimationFrame(() => {
       this.triggerCanvasResize();
     });
+  }
+
+  // File drop handlers
+  handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      this.handleFileUpload(files);
+    }
   }
 }
