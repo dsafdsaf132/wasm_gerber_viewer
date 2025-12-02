@@ -307,41 +307,6 @@ export class GerberProcessor {
         }
     }
     /**
-     * Set active layers (stores state for subsequent composite calls)
-     *
-     * # Arguments
-     * * `active_layer_ids` - Array of layer IDs to render (in order)
-     * * `color_data` - Flat array of [r, g, b] for each active layer (NO alpha)
-     *
-     * # Returns
-     * * `"set_done"` signal on success
-     * @param {Uint32Array} active_layer_ids
-     * @param {Float32Array} color_data
-     * @returns {string}
-     */
-    set_active_layers(active_layer_ids, color_data) {
-        let deferred4_0;
-        let deferred4_1;
-        try {
-            const ptr0 = passArray32ToWasm0(active_layer_ids, wasm.__wbindgen_malloc);
-            const len0 = WASM_VECTOR_LEN;
-            const ptr1 = passArrayF32ToWasm0(color_data, wasm.__wbindgen_malloc);
-            const len1 = WASM_VECTOR_LEN;
-            const ret = wasm.gerberprocessor_set_active_layers(this.__wbg_ptr, ptr0, len0, ptr1, len1);
-            var ptr3 = ret[0];
-            var len3 = ret[1];
-            if (ret[3]) {
-                ptr3 = 0; len3 = 0;
-                throw takeFromExternrefTable0(ret[2]);
-            }
-            deferred4_0 = ptr3;
-            deferred4_1 = len3;
-            return getStringFromWasm0(ptr3, len3);
-        } finally {
-            wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-        }
-    }
-    /**
      * Create a new GerberProcessor instance
      */
     constructor() {
@@ -440,6 +405,8 @@ export class GerberProcessor {
      * Render geometry to FBOs and composite to canvas
      *
      * # Arguments
+     * * `active_layer_ids` - Array of layer IDs to render (in order)
+     * * `color_data` - Flat array of [r, g, b] for each active layer (NO alpha)
      * * `zoom_x` - Horizontal zoom factor
      * * `zoom_y` - Vertical zoom factor
      * * `offset_x` - Horizontal pan offset
@@ -448,6 +415,8 @@ export class GerberProcessor {
      *
      * # Returns
      * * `"render_done"` signal on success
+     * @param {Uint32Array} active_layer_ids
+     * @param {Float32Array} color_data
      * @param {number} zoom_x
      * @param {number} zoom_y
      * @param {number} offset_x
@@ -455,22 +424,26 @@ export class GerberProcessor {
      * @param {number} alpha
      * @returns {string}
      */
-    render(zoom_x, zoom_y, offset_x, offset_y, alpha) {
-        let deferred2_0;
-        let deferred2_1;
+    render(active_layer_ids, color_data, zoom_x, zoom_y, offset_x, offset_y, alpha) {
+        let deferred4_0;
+        let deferred4_1;
         try {
-            const ret = wasm.gerberprocessor_render(this.__wbg_ptr, zoom_x, zoom_y, offset_x, offset_y, alpha);
-            var ptr1 = ret[0];
-            var len1 = ret[1];
+            const ptr0 = passArray32ToWasm0(active_layer_ids, wasm.__wbindgen_malloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ptr1 = passArrayF32ToWasm0(color_data, wasm.__wbindgen_malloc);
+            const len1 = WASM_VECTOR_LEN;
+            const ret = wasm.gerberprocessor_render(this.__wbg_ptr, ptr0, len0, ptr1, len1, zoom_x, zoom_y, offset_x, offset_y, alpha);
+            var ptr3 = ret[0];
+            var len3 = ret[1];
             if (ret[3]) {
-                ptr1 = 0; len1 = 0;
+                ptr3 = 0; len3 = 0;
                 throw takeFromExternrefTable0(ret[2]);
             }
-            deferred2_0 = ptr1;
-            deferred2_1 = len1;
-            return getStringFromWasm0(ptr1, len1);
+            deferred4_0 = ptr3;
+            deferred4_1 = len3;
+            return getStringFromWasm0(ptr3, len3);
         } finally {
-            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+            wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
         }
     }
     /**
@@ -520,35 +493,6 @@ export class GerberProcessor {
             throw takeFromExternrefTable0(ret[1]);
         }
         return ret[0] >>> 0;
-    }
-    /**
-     * Composite FBOs to canvas with updated alpha (reuses existing FBO geometry)
-     *
-     * # Arguments
-     * * `alpha` - Global alpha for all layers
-     *
-     * # Returns
-     * * `"composite_done"` signal on success
-     * @param {number} alpha
-     * @returns {string}
-     */
-    composite(alpha) {
-        let deferred2_0;
-        let deferred2_1;
-        try {
-            const ret = wasm.gerberprocessor_composite(this.__wbg_ptr, alpha);
-            var ptr1 = ret[0];
-            var len1 = ret[1];
-            if (ret[3]) {
-                ptr1 = 0; len1 = 0;
-                throw takeFromExternrefTable0(ret[2]);
-            }
-            deferred2_0 = ptr1;
-            deferred2_1 = len1;
-            return getStringFromWasm0(ptr1, len1);
-        } finally {
-            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-        }
     }
 }
 if (Symbol.dispose) GerberProcessor.prototype[Symbol.dispose] = GerberProcessor.prototype.free;

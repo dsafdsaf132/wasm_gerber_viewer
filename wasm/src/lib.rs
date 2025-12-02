@@ -120,32 +120,11 @@ impl GerberProcessor {
         Ok("parse_done".to_string())
     }
 
-    /// Set active layers (stores state for subsequent composite calls)
+    /// Render geometry to FBOs and composite to canvas
     ///
     /// # Arguments
     /// * `active_layer_ids` - Array of layer IDs to render (in order)
     /// * `color_data` - Flat array of [r, g, b] for each active layer (NO alpha)
-    ///
-    /// # Returns
-    /// * `"set_done"` signal on success
-    pub fn set_active_layers(
-        &mut self,
-        active_layer_ids: &[u32],
-        color_data: &[f32],
-    ) -> Result<String, JsValue> {
-        if let Some(renderer) = &mut self.renderer {
-            renderer.set_active_layers(active_layer_ids, color_data)?;
-            Ok("set_done".to_string())
-        } else {
-            Err(JsValue::from_str(
-                "Renderer not initialized. Call init() first.",
-            ))
-        }
-    }
-
-    /// Render geometry to FBOs and composite to canvas
-    ///
-    /// # Arguments
     /// * `zoom_x` - Horizontal zoom factor
     /// * `zoom_y` - Vertical zoom factor
     /// * `offset_x` - Horizontal pan offset
@@ -154,8 +133,11 @@ impl GerberProcessor {
     ///
     /// # Returns
     /// * `"render_done"` signal on success
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &mut self,
+        active_layer_ids: &[u32],
+        color_data: &[f32],
         zoom_x: f32,
         zoom_y: f32,
         offset_x: f32,
@@ -163,26 +145,16 @@ impl GerberProcessor {
         alpha: f32,
     ) -> Result<String, JsValue> {
         if let Some(renderer) = &mut self.renderer {
-            renderer.render(zoom_x, zoom_y, offset_x, offset_y, alpha)?;
+            renderer.render(
+                active_layer_ids,
+                color_data,
+                zoom_x,
+                zoom_y,
+                offset_x,
+                offset_y,
+                alpha,
+            )?;
             Ok("render_done".to_string())
-        } else {
-            Err(JsValue::from_str(
-                "Renderer not initialized. Call init() first.",
-            ))
-        }
-    }
-
-    /// Composite FBOs to canvas with updated alpha (reuses existing FBO geometry)
-    ///
-    /// # Arguments
-    /// * `alpha` - Global alpha for all layers
-    ///
-    /// # Returns
-    /// * `"composite_done"` signal on success
-    pub fn composite(&mut self, alpha: f32) -> Result<String, JsValue> {
-        if let Some(renderer) = &mut self.renderer {
-            renderer.composite(alpha)?;
-            Ok("composite_done".to_string())
         } else {
             Err(JsValue::from_str(
                 "Renderer not initialized. Call init() first.",

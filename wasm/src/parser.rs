@@ -918,15 +918,13 @@ impl Aperture {
 /// Aperture macro definition - kept as statements until parameters arrive
 #[derive(Clone, Debug)]
 pub struct ApertureMacro {
-    pub name: String,
     pub statements: Vec<String>, // Keep as String for dynamic calculation
     pub has_negative: bool,      // true if any primitive has exposure 0
 }
 
 impl ApertureMacro {
-    pub fn new(name: String) -> Self {
+    pub fn new() -> Self {
         ApertureMacro {
-            name,
             statements: Vec::new(),
             has_negative: false,
         }
@@ -1129,9 +1127,11 @@ impl GerberParser {
         // Save last accumulated primitives by polarity
         if !self.current_primitives.is_empty() {
             if self.current_state.polarity == Polarity::Positive {
-                self.positive_layers.push(take(&mut self.current_primitives));
+                self.positive_layers
+                    .push(take(&mut self.current_primitives));
             } else {
-                self.negative_layers.push(take(&mut self.current_primitives));
+                self.negative_layers
+                    .push(take(&mut self.current_primitives));
             }
         }
 
@@ -1891,7 +1891,7 @@ fn parse_macro(data: &str, macros: &mut HashMap<String, ApertureMacro>) {
     }
 
     let name = parts[0].to_string();
-    let mut macro_def = ApertureMacro::new(parts[0].to_string());
+    let mut macro_def = ApertureMacro::new();
 
     // Parse statements (parts[1] to parts[n-1], last part might be empty)
     for part in &parts[1..] {

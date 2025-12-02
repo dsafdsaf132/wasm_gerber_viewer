@@ -343,9 +343,6 @@ pub struct Renderer {
     programs: ShaderPrograms,
     camera: Camera,
     quad_buffer: WebGlBuffer, // Shared quad buffer for all layers
-    // Cached state for FBO reuse
-    active_layer_ids: Vec<u32>, // Currently active layer IDs
-    layer_colors: Vec<f32>,     // RGB colors (3 floats per layer, NO alpha)
 }
 
 impl Renderer {
@@ -364,8 +361,6 @@ impl Renderer {
             programs,
             camera: Camera::new(),
             quad_buffer,
-            active_layer_ids: Vec::new(),
-            layer_colors: Vec::new(),
         })
     }
 
@@ -1344,20 +1339,12 @@ impl Renderer {
     }
 
     /// Set active layers and colors (stores state for FBO reuse)
-    pub fn set_active_layers(
+    /// Render geometry to FBOs and composite to canvas
+    #[allow(clippy::too_many_arguments)]
+    pub fn render(
         &mut self,
         active_layer_ids: &[u32],
         color_data: &[f32],
-    ) -> Result<(), JsValue> {
-        // Store active layer IDs and colors (RGB only, no alpha)
-        self.active_layer_ids = active_layer_ids.to_vec();
-        self.layer_colors = color_data.to_vec();
-        Ok(())
-    }
-
-    /// Render geometry to FBOs and composite to canvas
-    pub fn render(
-        &mut self,
         zoom_x: f32,
         _zoom_y: f32,
         offset_x: f32,
@@ -1373,11 +1360,8 @@ impl Renderer {
         // Get transform matrix
         let transform = self.camera.get_transform_matrix(width, height);
 
-        // Clone active layer IDs to avoid borrow checker issues
-        let active_ids = self.active_layer_ids.clone();
-
         // STEP 1: Render each active layer's geometry to its FBO (white)
-        for &layer_id in &active_ids {
+        for &layer_id in active_layer_ids {
             let layer_idx = layer_id as usize;
 
             // Validate layer exists
@@ -1405,13 +1389,17 @@ impl Renderer {
         }
 
         // STEP 2: Composite FBOs to canvas
-        self.composite(alpha)?;
+        self.composite_layers(active_layer_ids, color_data, alpha)?;
 
         Ok(())
     }
 
-    /// Composite FBOs to canvas with alpha (reuses existing FBO geometry)
-    pub fn composite(&mut self, alpha: f32) -> Result<(), JsValue> {
+    fn composite_layers(
+        &mut self,
+        active_layer_ids: &[u32],
+        color_data: &[f32],
+        alpha: f32,
+    ) -> Result<(), JsValue> {
         // Get canvas dimensions
         let (width, height) = self.get_canvas_size()?;
 
@@ -1430,17 +1418,17 @@ impl Renderer {
         self.gl.blend_equation(FUNC_ADD);
 
         // Render each active layer's FBO to canvas with its color/alpha
-        for (color_index, &layer_id) in self.active_layer_ids.iter().enumerate() {
+        for (color_index, &layer_id) in active_layer_ids.iter().enumerate() {
             let layer_idx = layer_id as usize;
 
             if let Some(layer) = &self.layers[layer_idx] {
                 // Get RGB color from array (3 floats per layer)
                 let color_offset = color_index * 3;
-                if color_offset + 2 < self.layer_colors.len() {
+                if color_offset + 2 < color_data.len() {
                     let color = [
-                        self.layer_colors[color_offset],
-                        self.layer_colors[color_offset + 1],
-                        self.layer_colors[color_offset + 2],
+                        color_data[color_offset],
+                        color_data[color_offset + 1],
+                        color_data[color_offset + 2],
                         alpha, // Use provided alpha
                     ];
                     self.draw_fbo_texture(&layer.fbo.texture, &color)?;

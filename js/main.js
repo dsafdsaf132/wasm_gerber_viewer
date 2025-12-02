@@ -273,13 +273,10 @@ export class GerberViewer {
       }
     });
 
-    // Set active layers
-    this.wasmProcessor.set_active_layers(
+    // Render with active layers
+    this.wasmProcessor.render(
       new Uint32Array(activeLayerIds),
       new Float32Array(colorData),
-    );
-
-    this.wasmProcessor.render(
       this.camera.zoom,
       this.camera.zoom,
       this.camera.offsetX,
@@ -657,10 +654,8 @@ export class GerberViewer {
 
   updateGlobalAlpha(alpha) {
     this.globalAlpha = alpha;
-    // Only composite with new alpha (reuses FBO geometry)
-    if (this.wasmProcessor) {
-      this.wasmProcessor.composite(alpha);
-    }
+    // Re-render with new alpha
+    this.render();
   }
 
   deleteLayer(layerId) {

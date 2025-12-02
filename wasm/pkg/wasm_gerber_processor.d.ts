@@ -43,17 +43,6 @@ export class GerberProcessor {
    */
   remove_layer(layer_id: number): string;
   /**
-   * Set active layers (stores state for subsequent composite calls)
-   *
-   * # Arguments
-   * * `active_layer_ids` - Array of layer IDs to render (in order)
-   * * `color_data` - Flat array of [r, g, b] for each active layer (NO alpha)
-   *
-   * # Returns
-   * * `"set_done"` signal on success
-   */
-  set_active_layers(active_layer_ids: Uint32Array, color_data: Float32Array): string;
-  /**
    * Create a new GerberProcessor instance
    */
   constructor();
@@ -89,6 +78,8 @@ export class GerberProcessor {
    * Render geometry to FBOs and composite to canvas
    *
    * # Arguments
+   * * `active_layer_ids` - Array of layer IDs to render (in order)
+   * * `color_data` - Flat array of [r, g, b] for each active layer (NO alpha)
    * * `zoom_x` - Horizontal zoom factor
    * * `zoom_y` - Vertical zoom factor
    * * `offset_x` - Horizontal pan offset
@@ -98,7 +89,7 @@ export class GerberProcessor {
    * # Returns
    * * `"render_done"` signal on success
    */
-  render(zoom_x: number, zoom_y: number, offset_x: number, offset_y: number, alpha: number): string;
+  render(active_layer_ids: Uint32Array, color_data: Float32Array, zoom_x: number, zoom_y: number, offset_x: number, offset_y: number, alpha: number): string;
   /**
    * Resize framebuffers when canvas dimensions change (e.g., fullscreen)
    *
@@ -119,16 +110,6 @@ export class GerberProcessor {
    * * Layer ID (u32) for tracking this layer
    */
   add_layer(content: string): number;
-  /**
-   * Composite FBOs to canvas with updated alpha (reuses existing FBO geometry)
-   *
-   * # Arguments
-   * * `alpha` - Global alpha for all layers
-   *
-   * # Returns
-   * * `"composite_done"` signal on success
-   */
-  composite(alpha: number): string;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -144,15 +125,13 @@ export interface InitOutput {
   readonly boundary_new: (a: number, b: number, c: number, d: number) => number;
   readonly gerberprocessor_add_layer: (a: number, b: number, c: number) => [number, number, number];
   readonly gerberprocessor_clear: (a: number) => [number, number, number, number];
-  readonly gerberprocessor_composite: (a: number, b: number) => [number, number, number, number];
   readonly gerberprocessor_get_boundary: (a: number) => [number, number, number];
   readonly gerberprocessor_init: (a: number, b: any) => [number, number, number, number];
   readonly gerberprocessor_new: () => number;
   readonly gerberprocessor_parse: (a: number, b: number, c: number) => [number, number, number, number];
   readonly gerberprocessor_remove_layer: (a: number, b: number) => [number, number, number, number];
-  readonly gerberprocessor_render: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+  readonly gerberprocessor_render: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
   readonly gerberprocessor_resize: (a: number) => [number, number, number, number];
-  readonly gerberprocessor_set_active_layers: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
   readonly init_panic_hook: () => void;
   readonly __externref_table_alloc: () => number;
   readonly __wbindgen_externrefs: WebAssembly.Table;
