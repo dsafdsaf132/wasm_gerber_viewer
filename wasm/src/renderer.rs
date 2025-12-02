@@ -442,14 +442,157 @@ impl Renderer {
             )));
         }
 
-        self.layers[layer_id] = None;
+        // Remove layer metadata (which will drop cached WebGL resources)
+        if let Some(layer) = self.layers[layer_id].take() {
+            // Delete framebuffer and texture
+            self.gl.delete_framebuffer(Some(&layer.fbo.framebuffer));
+            self.gl.delete_texture(Some(&layer.fbo.texture));
+
+            // Delete all cached buffers and VAOs
+            for cache in layer.buffer_caches {
+                // Delete triangle cache
+                if let Some(vao) = cache.triangle_vao {
+                    self.gl.delete_vertex_array(Some(&vao));
+                }
+                if let Some(buf) = cache.triangle_vertex_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.triangle_index_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+
+                // Delete circle cache
+                if let Some(vao) = cache.circle_vao {
+                    self.gl.delete_vertex_array(Some(&vao));
+                }
+                if let Some(buf) = cache.circle_center_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.circle_radius_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+
+                // Delete arc cache
+                if let Some(vao) = cache.arc_vao {
+                    self.gl.delete_vertex_array(Some(&vao));
+                }
+                if let Some(buf) = cache.arc_center_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.arc_radius_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.arc_start_angle_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.arc_sweep_angle_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.arc_thickness_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+
+                // Delete thermal cache
+                if let Some(vao) = cache.thermal_vao {
+                    self.gl.delete_vertex_array(Some(&vao));
+                }
+                if let Some(buf) = cache.thermal_center_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.thermal_outer_diameter_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.thermal_inner_diameter_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.thermal_gap_thickness_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.thermal_rotation_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+            }
+        }
+
         self.layer_count -= 1;
         Ok(())
     }
 
-    /// Clear all layers
+    /// Clear all layers and clean up WebGL resources
     pub fn clear_all(&mut self) {
-        self.layers.clear();
+        // Delete all cached resources for each layer
+        for layer_opt in self.layers.drain(..) {
+            if let Some(layer) = layer_opt {
+                // Delete framebuffer and texture
+                self.gl.delete_framebuffer(Some(&layer.fbo.framebuffer));
+                self.gl.delete_texture(Some(&layer.fbo.texture));
+
+                // Delete all cached buffers and VAOs
+                for cache in layer.buffer_caches {
+                    // Delete triangle cache
+                    if let Some(vao) = cache.triangle_vao {
+                        self.gl.delete_vertex_array(Some(&vao));
+                    }
+                    if let Some(buf) = cache.triangle_vertex_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+                    if let Some(buf) = cache.triangle_index_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+
+                    // Delete circle cache
+                    if let Some(vao) = cache.circle_vao {
+                        self.gl.delete_vertex_array(Some(&vao));
+                    }
+                    if let Some(buf) = cache.circle_center_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+                    if let Some(buf) = cache.circle_radius_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+
+                    // Delete arc cache
+                    if let Some(vao) = cache.arc_vao {
+                        self.gl.delete_vertex_array(Some(&vao));
+                    }
+                    if let Some(buf) = cache.arc_center_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+                    if let Some(buf) = cache.arc_radius_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+                    if let Some(buf) = cache.arc_start_angle_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+                    if let Some(buf) = cache.arc_sweep_angle_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+                    if let Some(buf) = cache.arc_thickness_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+
+                    // Delete thermal cache
+                    if let Some(vao) = cache.thermal_vao {
+                        self.gl.delete_vertex_array(Some(&vao));
+                    }
+                    if let Some(buf) = cache.thermal_center_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+                    if let Some(buf) = cache.thermal_outer_diameter_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+                    if let Some(buf) = cache.thermal_inner_diameter_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+                    if let Some(buf) = cache.thermal_gap_thickness_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+                    if let Some(buf) = cache.thermal_rotation_buffer {
+                        self.gl.delete_buffer(Some(&buf));
+                    }
+                }
+            }
+        }
         self.layer_count = 0;
     }
 

@@ -234,8 +234,11 @@ export class GerberViewer {
 
   async addLayer(name, content) {
     try {
-      // add layer to WASM processor
+      // add layer to WASM processor and get layer ID
       const layerId = this.wasmProcessor.add_layer(content);
+      if (layerId === undefined || layerId === null) {
+        throw new Error("Failed to get layer ID from WASM processor");
+      }
 
       // Get layer boundary from WASM
       const bounds = this.wasmProcessor.get_boundary();
@@ -268,33 +271,37 @@ export class GerberViewer {
   render() {
     if (!this.wasmProcessor) return;
 
-    // Get selected layers
-    const selectedLayerIds = this.getSelectedLayerIds();
+    try {
+      // Get selected layers
+      const selectedLayerIds = this.getSelectedLayerIds();
 
-    const activeLayerIds = [];
-    const colorData = [];
+      const activeLayerIds = [];
+      const colorData = [];
 
-    this.layers.forEach((layer) => {
-      if (selectedLayerIds.has(layer.id)) {
-        activeLayerIds.push(layer.layerId);
+      this.layers.forEach((layer) => {
+        if (selectedLayerIds.has(layer.id)) {
+          activeLayerIds.push(layer.layerId);
 
-        // Add RGB color (no alpha)
-        colorData.push(layer.color[0]);
-        colorData.push(layer.color[1]);
-        colorData.push(layer.color[2]);
-      }
-    });
+          // Add RGB color (no alpha)
+          colorData.push(layer.color[0]);
+          colorData.push(layer.color[1]);
+          colorData.push(layer.color[2]);
+        }
+      });
 
-    // Render with active layers
-    this.wasmProcessor.render(
-      new Uint32Array(activeLayerIds),
-      new Float32Array(colorData),
-      this.camera.zoom,
-      this.camera.zoom,
-      this.camera.offsetX,
-      this.camera.offsetY,
-      this.globalAlpha,
-    );
+      // Render with active layers
+      this.wasmProcessor.render(
+        new Uint32Array(activeLayerIds),
+        new Float32Array(colorData),
+        this.camera.zoom,
+        this.camera.zoom,
+        this.camera.offsetX,
+        this.camera.offsetY,
+        this.globalAlpha,
+      );
+    } catch (error) {
+      console.error("[Render] Failed to render:", error);
+    }
   }
 
   getSelectedLayerIds() {
@@ -675,11 +682,16 @@ export class GerberViewer {
     if (index !== -1) {
       const layer = this.layers[index];
 
-      // remove from WASM processor
-      this.wasmProcessor.remove_layer(layer.layerId);
+      try {
+        // remove from WASM processor and handle errors
+        this.wasmProcessor.remove_layer(layer.layerId);
 
-      // remove from JS array
-      this.layers.splice(index, 1);
+        // remove from JS array only if WASM removal succeeded
+        this.layers.splice(index, 1);
+      } catch (error) {
+        console.error(`[Layer] Failed to remove layer ${layer.name}:`, error);
+        return;
+      }
     }
 
     this.renderLayerList();
@@ -687,13 +699,17 @@ export class GerberViewer {
   }
 
   clearAllLayers() {
-    // remove all layers from WASM processor
-    this.wasmProcessor.clear();
+    try {
+      // remove all layers from WASM processor
+      this.wasmProcessor.clear();
 
-    this.layers = [];
-    this.nextColorIndex = 0;
-    this.renderLayerList();
-    this.render();
+      this.layers = [];
+      this.nextColorIndex = 0;
+      this.renderLayerList();
+      this.render();
+    } catch (error) {
+      console.error("[Layer] Failed to clear all layers:", error);
+    }
   }
 
   selectAllLayerCheckboxes() {
