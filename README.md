@@ -48,14 +48,11 @@ wasm_gerber_viewer/
 │   └── style.css                          # Application styles
 └── wasm/                                  # Rust/WASM module
     ├── Cargo.toml                         # Rust dependencies
-    ├── src/                               # Rust source
-    │   ├── lib.rs                         # WASM entry point (GerberProcessor)
-    │   ├── parser.rs                      # Gerber file parser
-    │   ├── renderer.rs                    # WebGL2 renderer
-    │   └── shape.rs                       # Geometry data structures
-    └── pkg/                               # WASM build output
-        ├── wasm_gerber_processor.js       # JS bindings
-        └── wasm_gerber_processor_bg.wasm  # WASM binary
+    └── src/                               # Rust source
+        ├── lib.rs                         # WASM entry point (GerberProcessor)
+        ├── parser.rs                      # Gerber file parser
+        ├── renderer.rs                    # WebGL2 renderer
+        └── shape.rs                       # Geometry data structures
 ```
 
 ## Browser Requirements
