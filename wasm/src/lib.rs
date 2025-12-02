@@ -1,3 +1,6 @@
+mod aperture;
+mod geometry;
+mod macro_;
 mod parser;
 mod renderer;
 mod shape;
