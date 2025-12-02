@@ -4,6 +4,7 @@ use i_overlay::core::overlay_rule::OverlayRule;
 use i_overlay::float::single::SingleFloatOverlay;
 use i_triangle::float::triangulatable::Triangulatable;
 use std::collections::HashMap;
+use std::mem::take;
 use wasm_bindgen::prelude::*;
 
 /// Polarity - Dark (positive) or Clear (negative)
@@ -105,8 +106,7 @@ fn tokenize(expr: &str) -> Result<Vec<String>, String> {
     while let Some(ch) = chars.next() {
         if ch.is_ascii_whitespace() {
             if !current_token.is_empty() {
-                tokens.push(current_token.clone());
-                current_token.clear();
+                tokens.push(take(&mut current_token));
             }
             continue;
         }
@@ -121,8 +121,7 @@ fn tokenize(expr: &str) -> Result<Vec<String>, String> {
             if let Some(&next_ch) = chars.peek() {
                 if next_ch == '$' {
                     // Case like -$1
-                    tokens.push(current_token.clone()); // Save "-"
-                    current_token.clear();
+                    tokens.push(take(&mut current_token)); // Save "-"
 
                     // Process $variable
                     current_token.push(chars.next().unwrap()); // $
@@ -133,8 +132,7 @@ fn tokenize(expr: &str) -> Result<Vec<String>, String> {
                             break;
                         }
                     }
-                    tokens.push(current_token.clone());
-                    current_token.clear();
+                    tokens.push(take(&mut current_token));
                 } else if next_ch.is_ascii_digit() || next_ch == '.' {
                     // Read number after sign
                     while let Some(&next_ch) = chars.peek() {
@@ -144,13 +142,11 @@ fn tokenize(expr: &str) -> Result<Vec<String>, String> {
                             break;
                         }
                     }
-                    tokens.push(current_token.clone());
-                    current_token.clear();
+                    tokens.push(take(&mut current_token));
                 } else {
                     // If only sign without following value, treat as operator
                     if !current_token.is_empty() {
-                        tokens.push(current_token.clone());
-                        current_token.clear();
+                        tokens.push(take(&mut current_token));
                     }
                     tokens.push(ch.to_string());
                 }
@@ -159,8 +155,7 @@ fn tokenize(expr: &str) -> Result<Vec<String>, String> {
         // Process $variable: $1, $2, $5, etc.
         else if ch == '$' {
             if !current_token.is_empty() {
-                tokens.push(current_token.clone());
-                current_token.clear();
+                tokens.push(take(&mut current_token));
             }
 
             current_token.push(ch);
@@ -171,8 +166,7 @@ fn tokenize(expr: &str) -> Result<Vec<String>, String> {
                     break;
                 }
             }
-            tokens.push(current_token.clone());
-            current_token.clear();
+            tokens.push(take(&mut current_token));
         }
         // Regular number
         else if ch.is_ascii_digit() || ch == '.' {
@@ -181,8 +175,7 @@ fn tokenize(expr: &str) -> Result<Vec<String>, String> {
         // Operator
         else if "+-*/()".contains(ch) {
             if !current_token.is_empty() {
-                tokens.push(current_token.clone());
-                current_token.clear();
+                tokens.push(take(&mut current_token));
             }
             tokens.push(ch.to_string());
         } else {
@@ -1136,9 +1129,9 @@ impl GerberParser {
         // Save last accumulated primitives by polarity
         if !self.current_primitives.is_empty() {
             if self.current_state.polarity == Polarity::Positive {
-                self.positive_layers.push(self.current_primitives.clone());
+                self.positive_layers.push(take(&mut self.current_primitives));
             } else {
-                self.negative_layers.push(self.current_primitives.clone());
+                self.negative_layers.push(take(&mut self.current_primitives));
             }
         }
 
@@ -1898,7 +1891,7 @@ fn parse_macro(data: &str, macros: &mut HashMap<String, ApertureMacro>) {
     }
 
     let name = parts[0].to_string();
-    let mut macro_def = ApertureMacro::new(name);
+    let mut macro_def = ApertureMacro::new(parts[0].to_string());
 
     // Parse statements (parts[1] to parts[n-1], last part might be empty)
     for part in &parts[1..] {
@@ -1914,7 +1907,7 @@ fn parse_macro(data: &str, macros: &mut HashMap<String, ApertureMacro>) {
     // Calculate has_negative by checking if any statement has exposure=0
     macro_def.has_negative = check_macro_has_negative(&macro_def.statements);
 
-    macros.insert(macro_def.name.clone(), macro_def);
+    macros.insert(name, macro_def);
 }
 
 /// Check if macro statements contain any primitive with exposure=0
@@ -2384,12 +2377,10 @@ fn parse_lp(
     if state.polarity != new_polarity && !current_primitives.is_empty() {
         // Save to layer according to current polarity
         if state.polarity == Polarity::Positive {
-            positive_layers.push(current_primitives.clone());
+            positive_layers.push(take(current_primitives));
         } else {
-            negative_layers.push(current_primitives.clone());
+            negative_layers.push(take(current_primitives));
         }
-        // Initialize primitives for new polarity
-        current_primitives.clear();
     }
 
     // Set new polarity

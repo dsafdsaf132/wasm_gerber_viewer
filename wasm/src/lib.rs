@@ -21,7 +21,7 @@ pub fn init_panic_hook() {
 pub struct GerberProcessor {
     gl: Option<WebGl2RenderingContext>,
     renderer: Option<Renderer>,
-    next_layer_id: u32,  // Layer ID generator
+    next_layer_id: u32, // Layer ID generator
 }
 
 #[wasm_bindgen]
