@@ -116,7 +116,13 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
+  readonly __wbg_boundary_free: (a: number, b: number) => void;
   readonly __wbg_gerberprocessor_free: (a: number, b: number) => void;
+  readonly boundary_max_x: (a: number) => number;
+  readonly boundary_max_y: (a: number) => number;
+  readonly boundary_min_x: (a: number) => number;
+  readonly boundary_min_y: (a: number) => number;
+  readonly boundary_new: (a: number, b: number, c: number, d: number) => number;
   readonly gerberprocessor_add_layer: (a: number, b: number, c: number) => [number, number, number];
   readonly gerberprocessor_clear: (a: number) => [number, number, number, number];
   readonly gerberprocessor_get_boundary: (a: number) => [number, number, number];
@@ -127,12 +133,6 @@ export interface InitOutput {
   readonly gerberprocessor_render: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
   readonly gerberprocessor_resize: (a: number) => [number, number, number, number];
   readonly init_panic_hook: () => void;
-  readonly __wbg_boundary_free: (a: number, b: number) => void;
-  readonly boundary_max_x: (a: number) => number;
-  readonly boundary_max_y: (a: number) => number;
-  readonly boundary_min_x: (a: number) => number;
-  readonly boundary_min_y: (a: number) => number;
-  readonly boundary_new: (a: number, b: number, c: number, d: number) => number;
   readonly __externref_table_alloc: () => number;
   readonly __wbindgen_externrefs: WebAssembly.Table;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
