@@ -5,14 +5,6 @@
  */
 export function init_panic_hook(): void;
 /**
- * Arc primitive data structure
- */
-export class Arcs {
-  free(): void;
-  [Symbol.dispose](): void;
-  constructor(x: Float32Array, y: Float32Array, radius: Float32Array, start_angle: Float32Array, sweep_angle: Float32Array, thickness: Float32Array);
-}
-/**
  * Boundary information for the entire Gerber layer
  */
 export class Boundary {
@@ -23,22 +15,6 @@ export class Boundary {
   readonly max_y: number;
   readonly min_x: number;
   readonly min_y: number;
-}
-/**
- * Circle primitive data structure
- */
-export class Circles {
-  free(): void;
-  [Symbol.dispose](): void;
-  constructor(x: Float32Array, y: Float32Array, radius: Float32Array);
-}
-/**
- * Container for all parsed Gerber data
- */
-export class GerberData {
-  free(): void;
-  [Symbol.dispose](): void;
-  constructor(triangles: Triangles, circles: Circles, arcs: Arcs, thermals: Thermals, boundary: Boundary);
 }
 /**
  * Main Gerber processor with stateful WebGL renderer
@@ -154,41 +130,18 @@ export class GerberProcessor {
    */
   composite(alpha: number): string;
 }
-/**
- * Thermal primitive data structure
- */
-export class Thermals {
-  free(): void;
-  [Symbol.dispose](): void;
-  constructor(x: Float32Array, y: Float32Array, outer_diameter: Float32Array, inner_diameter: Float32Array, gap_thickness: Float32Array, rotation: Float32Array);
-}
-/**
- * Triangle mesh data structure
- */
-export class Triangles {
-  free(): void;
-  [Symbol.dispose](): void;
-  constructor(vertices: Float32Array, indices: Uint32Array);
-}
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly __wbg_arcs_free: (a: number, b: number) => void;
   readonly __wbg_boundary_free: (a: number, b: number) => void;
-  readonly __wbg_circles_free: (a: number, b: number) => void;
-  readonly __wbg_gerberdata_free: (a: number, b: number) => void;
   readonly __wbg_gerberprocessor_free: (a: number, b: number) => void;
-  readonly __wbg_triangles_free: (a: number, b: number) => void;
-  readonly arcs_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => number;
   readonly boundary_max_x: (a: number) => number;
   readonly boundary_max_y: (a: number) => number;
   readonly boundary_min_x: (a: number) => number;
   readonly boundary_min_y: (a: number) => number;
   readonly boundary_new: (a: number, b: number, c: number, d: number) => number;
-  readonly circles_new: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
-  readonly gerberdata_new: (a: number, b: number, c: number, d: number, e: number) => number;
   readonly gerberprocessor_add_layer: (a: number, b: number, c: number) => [number, number, number];
   readonly gerberprocessor_clear: (a: number) => [number, number, number, number];
   readonly gerberprocessor_composite: (a: number, b: number) => [number, number, number, number];
@@ -200,10 +153,7 @@ export interface InitOutput {
   readonly gerberprocessor_render: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
   readonly gerberprocessor_resize: (a: number) => [number, number, number, number];
   readonly gerberprocessor_set_active_layers: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
-  readonly triangles_new: (a: number, b: number, c: number, d: number) => number;
   readonly init_panic_hook: () => void;
-  readonly thermals_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => number;
-  readonly __wbg_thermals_free: (a: number, b: number) => void;
   readonly __externref_table_alloc: () => number;
   readonly __wbindgen_externrefs: WebAssembly.Table;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
