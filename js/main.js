@@ -162,12 +162,25 @@ export class GerberViewer {
       passive: false,
     });
 
-    // Drawer resize events
+    // Drawer resize events (mouse)
     this.resizeHandle.addEventListener("mousedown", (e) =>
       this.startDrawerResize(e),
     );
     document.addEventListener("mousemove", (e) => this.resizeDrawer(e));
     document.addEventListener("mouseup", (e) => this.stopDrawerResize(e));
+
+    // Drawer resize events (touch)
+    this.resizeHandle.addEventListener(
+      "touchstart",
+      (e) => this.startDrawerResize(e),
+      { passive: false },
+    );
+    document.addEventListener("touchmove", (e) => this.resizeDrawer(e), {
+      passive: false,
+    });
+    document.addEventListener("touchend", (e) => this.stopDrawerResize(e), {
+      passive: false,
+    });
 
     // Drawer toggle event
     this.drawerToggleBtn.addEventListener("click", (e) => {
@@ -769,9 +782,12 @@ export class GerberViewer {
   resizeDrawer(e) {
     if (!this.isResizingDrawer) return;
 
-    // Calculate new width based on mouse position
-    // Mouse X position from right edge of viewport
-    const newWidth = window.innerWidth - e.clientX;
+    // Get X position from mouse or touch event
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+
+    // Calculate new width based on position
+    // X position from right edge of viewport
+    const newWidth = window.innerWidth - clientX;
 
     // Constrain width within min and max bounds
     if (newWidth >= this.drawerMinWidth && newWidth <= this.drawerMaxWidth) {
