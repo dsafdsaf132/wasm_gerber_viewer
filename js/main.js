@@ -199,9 +199,21 @@ export class GerberViewer {
   }
 
   async handleFileUpload(files) {
+    const validExtensions = [
+      'gdo', 'gbr', 'ger', 'art', 'gtl', 'gbl',
+      'gts', 'gbs', 'gto', 'gbo', 'gtp', 'gbp'
+    ];
+
     // Process all files in parallel (skip rendering during parallel processing)
     const promises = Array.from(files).map(async (file) => {
       try {
+        // Check file extension
+        const fileExtension = file.name.split('.').pop().toLowerCase();
+        if (!validExtensions.includes(fileExtension)) {
+          console.error(`Invalid file format: ${file.name} (only ${validExtensions.join(', ')} allowed)`);
+          return;
+        }
+
         const content = await file.text();
         await this.addLayer(file.name, content);
       } catch (error) {
