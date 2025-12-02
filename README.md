@@ -29,9 +29,7 @@ git clone https://github.com/dsafdsaf132/wasm_gerber_viewer.git
 cd wasm_gerber_viewer
 
 # Build WASM module
-cd wasm
-wasm-pack build --target web --out-dir pkg --release
-cd ..
+wasm-pack build wasm --target web --out-dir pkg --release
 
 # Start development server
 python3 -m http.server 8000
