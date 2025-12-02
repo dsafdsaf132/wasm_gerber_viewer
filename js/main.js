@@ -400,8 +400,7 @@ export class GerberViewer {
       mouseYCorrected = mouseYNDC / aspect;
     }
 
-    const zoomIntensity = 0.2;
-    const zoomChange = e.deltaY < 0 ? 1 + zoomIntensity : 1 - zoomIntensity;
+    const zoomChange = 1 + (e.deltaY<0?1:-1) * Math.sqrt(Math.abs(e.deltaY)) * 0.02;
 
     const prevZoom = this.camera.zoom;
     const newZoom = prevZoom * zoomChange;
