@@ -38,6 +38,13 @@ export class GerberViewer {
     this.isPanning = false;
     this.lastMousePos = { x: 0, y: 0 };
 
+    // Touch interaction
+    this.isTouching = false;
+    this.touches = [];
+    this.initialPinchDistance = null;
+    this.lastPinchDistance = null;
+    this.lastTouchCenter = { x: 0, y: 0 };
+
     // Drawer resize state
     this.isResizingDrawer = false;
     this.drawerCurrentWidth = 300; // Default width
@@ -140,6 +147,20 @@ export class GerberViewer {
     this.canvas.addEventListener("mouseup", (e) => this.handleMouseUp(e));
     this.canvas.addEventListener("mouseleave", (e) => this.handleMouseUp(e));
     this.canvas.addEventListener("wheel", (e) => this.handleWheel(e));
+
+    // Canvas touch events
+    this.canvas.addEventListener("touchstart", (e) => this.handleTouchStart(e), {
+      passive: false,
+    });
+    this.canvas.addEventListener("touchmove", (e) => this.handleTouchMove(e), {
+      passive: false,
+    });
+    this.canvas.addEventListener("touchend", (e) => this.handleTouchEnd(e), {
+      passive: false,
+    });
+    this.canvas.addEventListener("touchcancel", (e) => this.handleTouchEnd(e), {
+      passive: false,
+    });
 
     // Drawer resize events
     this.resizeHandle.addEventListener("mousedown", (e) =>
@@ -429,6 +450,177 @@ export class GerberViewer {
     }
 
     this.render();
+  }
+
+  // Touch event handlers
+  handleTouchStart(e) {
+    e.preventDefault();
+
+    this.isTouching = true;
+    this.touches = Array.from(e.touches);
+
+    if (this.touches.length === 2) {
+      // Two-finger gesture: pinch-to-zoom
+      this.initialPinchDistance = this.calculateTouchDistance(
+        this.touches[0],
+        this.touches[1],
+      );
+      this.lastPinchDistance = this.initialPinchDistance;
+
+      const center = this.getTouchCenter(this.touches[0], this.touches[1]);
+      this.lastTouchCenter = center;
+    } else if (this.touches.length === 1) {
+      // Single finger: pan
+      this.lastTouchCenter = {
+        x: this.touches[0].clientX,
+        y: this.touches[0].clientY,
+      };
+    }
+  }
+
+  handleTouchMove(e) {
+    e.preventDefault();
+
+    if (!this.isTouching) return;
+
+    this.touches = Array.from(e.touches);
+
+    if (this.touches.length === 2) {
+      // Two-finger gesture: pinch-to-zoom + pan
+      const currentDistance = this.calculateTouchDistance(
+        this.touches[0],
+        this.touches[1],
+      );
+      const currentCenter = this.getTouchCenter(
+        this.touches[0],
+        this.touches[1],
+      );
+
+      // Handle pinch zoom
+      if (this.lastPinchDistance !== null) {
+        const rect = this.canvas.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        // Calculate zoom center in NDC
+        const mx_screen = currentCenter.x - rect.left;
+        const my_screen = currentCenter.y - rect.top;
+
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const mouseXNDC = ((mx_screen - centerX) / rect.width) * 2;
+        const mouseYNDC = -((my_screen - centerY) / rect.height) * 2;
+
+        const aspect = this.canvas.width / this.canvas.height;
+
+        let mouseXCorrected, mouseYCorrected;
+        if (aspect > 1.0) {
+          mouseXCorrected = mouseXNDC * aspect;
+          mouseYCorrected = mouseYNDC;
+        } else {
+          mouseXCorrected = mouseXNDC;
+          mouseYCorrected = mouseYNDC / aspect;
+        }
+
+        // Apply zoom
+        const zoomChange = currentDistance / this.lastPinchDistance;
+        const prevZoom = this.camera.zoom;
+        const newZoom = prevZoom * zoomChange;
+        const zoomRatio = newZoom / prevZoom;
+
+        this.camera.offsetX =
+          (this.camera.offsetX - mouseXCorrected) * zoomRatio + mouseXCorrected;
+        this.camera.offsetY =
+          (this.camera.offsetY - mouseYCorrected) * zoomRatio + mouseYCorrected;
+        this.camera.zoom = newZoom;
+
+        this.lastPinchDistance = currentDistance;
+      }
+
+      // Handle pan
+      const deltaX = currentCenter.x - this.lastTouchCenter.x;
+      const deltaY = currentCenter.y - this.lastTouchCenter.y;
+
+      const canvasRect = this.canvas.getBoundingClientRect();
+      if (canvasRect.width > 0 && canvasRect.height > 0) {
+        const deltaXNDC = (deltaX / canvasRect.width) * 2;
+        const deltaYNDC = (-deltaY / canvasRect.height) * 2;
+        const aspect = this.canvas.width / this.canvas.height;
+
+        if (aspect > 1.0) {
+          this.camera.offsetX += deltaXNDC * aspect;
+          this.camera.offsetY += deltaYNDC;
+        } else {
+          this.camera.offsetX += deltaXNDC;
+          this.camera.offsetY += deltaYNDC / aspect;
+        }
+      }
+
+      this.lastTouchCenter = currentCenter;
+      this.render();
+    } else if (this.touches.length === 1) {
+      // Single finger: pan
+      const currentPos = {
+        x: this.touches[0].clientX,
+        y: this.touches[0].clientY,
+      };
+
+      const deltaX = currentPos.x - this.lastTouchCenter.x;
+      const deltaY = currentPos.y - this.lastTouchCenter.y;
+
+      const canvasRect = this.canvas.getBoundingClientRect();
+      if (canvasRect.width > 0 && canvasRect.height > 0) {
+        const deltaXNDC = (deltaX / canvasRect.width) * 2;
+        const deltaYNDC = (-deltaY / canvasRect.height) * 2;
+        const aspect = this.canvas.width / this.canvas.height;
+
+        if (aspect > 1.0) {
+          this.camera.offsetX += deltaXNDC * aspect;
+          this.camera.offsetY += deltaYNDC;
+        } else {
+          this.camera.offsetX += deltaXNDC;
+          this.camera.offsetY += deltaYNDC / aspect;
+        }
+      }
+
+      this.lastTouchCenter = currentPos;
+      this.render();
+    }
+  }
+
+  handleTouchEnd(e) {
+    e.preventDefault();
+
+    this.touches = Array.from(e.touches);
+
+    if (this.touches.length < 2) {
+      // Reset pinch state
+      this.initialPinchDistance = null;
+      this.lastPinchDistance = null;
+    }
+
+    if (this.touches.length === 0) {
+      // All touches ended
+      this.isTouching = false;
+    } else if (this.touches.length === 1) {
+      // Transitioned from multi-touch to single touch
+      this.lastTouchCenter = {
+        x: this.touches[0].clientX,
+        y: this.touches[0].clientY,
+      };
+    }
+  }
+
+  calculateTouchDistance(touch1, touch2) {
+    const dx = touch2.clientX - touch1.clientX;
+    const dy = touch2.clientY - touch1.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  getTouchCenter(touch1, touch2) {
+    return {
+      x: (touch1.clientX + touch2.clientX) / 2,
+      y: (touch1.clientY + touch2.clientY) / 2,
+    };
   }
 
   updateLayerColor(layerId, hexColor) {
