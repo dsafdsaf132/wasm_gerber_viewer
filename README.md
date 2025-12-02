@@ -26,6 +26,14 @@ python3 -m http.server 8000
 
 Open `http://localhost:8000` and upload files.
 
+## Build Instructions
+
+```bash
+# Build WASM module (requires Rust and wasm-pack)
+cd wasm
+wasm-pack build --target web --out-dir pkg --release
+```
+
 ## Project Structure
 
 ```
@@ -45,14 +53,6 @@ wasm_gerber_viewer/
     └── pkg/                               # WASM build output
         ├── wasm_gerber_processor.js       # JS bindings
         └── wasm_gerber_processor_bg.wasm  # WASM binary
-```
-
-## Build Instructions
-
-```bash
-# Build WASM module (requires Rust and wasm-pack)
-cd wasm
-wasm-pack build --target web --out-dir pkg --release
 ```
 
 ## Browser Requirements
