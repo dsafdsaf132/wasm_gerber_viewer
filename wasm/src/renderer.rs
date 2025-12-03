@@ -83,9 +83,13 @@ impl Renderer {
                 triangle_vao: None,
                 triangle_vertex_buffer: None,
                 triangle_index_buffer: None,
+                triangle_hole_center_buffer: None,
+                triangle_hole_radius_buffer: None,
                 circle_vao: None,
                 circle_center_buffer: None,
                 circle_radius_buffer: None,
+                circle_hole_center_buffer: None,
+                circle_hole_radius_buffer: None,
                 arc_vao: None,
                 arc_center_buffer: None,
                 arc_radius_buffer: None,
@@ -520,6 +524,38 @@ impl Renderer {
                 self.gl
                     .vertex_attrib_pointer_with_i32(position_loc, 2, FLOAT, false, 0, 0);
 
+                // Create regular attribute buffers for hole data (per-vertex)
+                let hole_centers = Self::interleave_xy(&triangles.hole_x, &triangles.hole_y);
+                let hole_center_buffer = self
+                    .gl
+                    .create_buffer()
+                    .ok_or_else(|| JsValue::from_str("Failed to create hole center buffer"))?;
+                self.gl.bind_buffer(ARRAY_BUFFER, Some(&hole_center_buffer));
+                unsafe {
+                    let array = Float32Array::view(&hole_centers);
+                    self.gl
+                        .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
+                }
+                let hole_center_loc = *program.attributes.get("hole_center_instance").unwrap();
+                self.gl.enable_vertex_attrib_array(hole_center_loc);
+                self.gl
+                    .vertex_attrib_pointer_with_i32(hole_center_loc, 2, FLOAT, false, 0, 0);
+
+                let hole_radius_buffer = self
+                    .gl
+                    .create_buffer()
+                    .ok_or_else(|| JsValue::from_str("Failed to create hole radius buffer"))?;
+                self.gl.bind_buffer(ARRAY_BUFFER, Some(&hole_radius_buffer));
+                unsafe {
+                    let array = Float32Array::view(&triangles.hole_radius);
+                    self.gl
+                        .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
+                }
+                let hole_radius_loc = *program.attributes.get("hole_radius_instance").unwrap();
+                self.gl.enable_vertex_attrib_array(hole_radius_loc);
+                self.gl
+                    .vertex_attrib_pointer_with_i32(hole_radius_loc, 1, FLOAT, false, 0, 0);
+
                 // Unbind VAO
                 self.gl.bind_vertex_array(None);
 
@@ -527,6 +563,8 @@ impl Renderer {
                 buffer_cache.triangle_vao = Some(vao);
                 buffer_cache.triangle_vertex_buffer = Some(vertex_buffer);
                 buffer_cache.triangle_index_buffer = Some(index_buffer);
+                buffer_cache.triangle_hole_center_buffer = Some(hole_center_buffer);
+                buffer_cache.triangle_hole_radius_buffer = Some(hole_radius_buffer);
             }
 
             triangles.indices.len()
@@ -614,6 +652,21 @@ impl Renderer {
                 "radius_instance",
                 1,
             )?;
+            let hole_centers = Self::interleave_xy(&circles.hole_x, &circles.hole_y);
+            let hole_center_buffer = Self::create_instance_buffer_2d(
+                &self.gl,
+                &hole_centers,
+                program,
+                "hole_center_instance",
+                1,
+            )?;
+            let hole_radius_buffer = Self::create_instance_buffer(
+                &self.gl,
+                &circles.hole_radius,
+                program,
+                "hole_radius_instance",
+                1,
+            )?;
 
             // Unbind VAO
             self.gl.bind_vertex_array(None);
@@ -622,6 +675,8 @@ impl Renderer {
             buffer_cache.circle_vao = Some(vao);
             buffer_cache.circle_center_buffer = Some(center_buffer);
             buffer_cache.circle_radius_buffer = Some(radius_buffer);
+            buffer_cache.circle_hole_center_buffer = Some(hole_center_buffer);
+            buffer_cache.circle_hole_radius_buffer = Some(hole_radius_buffer);
         }
 
         // Re-get immutable reference for rendering

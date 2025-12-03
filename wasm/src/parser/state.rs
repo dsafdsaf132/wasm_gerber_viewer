@@ -57,6 +57,8 @@ pub struct ParserState {
     pub sr_y: u32,
     pub sr_i: f32,
     pub sr_j: f32,
+    // Layer Scaling
+    pub layer_scale: f32,
 }
 
 impl Default for ParserState {
@@ -80,6 +82,7 @@ impl Default for ParserState {
             sr_y: 1,
             sr_i: 0.0,
             sr_j: 0.0,
+            layer_scale: 1.0,
         }
     }
 }
@@ -167,6 +170,7 @@ pub fn parse_format_spec(line: &str, state: &mut ParserState) {
 
 /// Parse Step and Repeat - %SRX3Y2I10J20*%
 /// Format: %SR[X count][Y count][I x_step][J y_step]*%
+/// %SR* without parameters disables step and repeat
 pub fn parse_sr(line: &str, state: &mut ParserState) {
     // Extract SRX3Y2I10J20 part from %SRX3Y2I10J20*% format
     let spec_str = line
@@ -179,6 +183,15 @@ pub fn parse_sr(line: &str, state: &mut ParserState) {
     }
 
     let spec_content = &spec_str[2..]; // "X3Y2I10J20" part
+
+    // If no parameters, disable step and repeat (reset to default)
+    if spec_content.is_empty() {
+        state.sr_x = 1;
+        state.sr_y = 1;
+        state.sr_i = 0.0;
+        state.sr_j = 0.0;
+        return;
+    }
 
     // Extract X count
     if let Some(x_pos) = spec_content.find('X') {
@@ -311,4 +324,25 @@ pub fn parse_mo(line: &str, state: &mut ParserState) {
     } else {
         return;
     };
+}
+
+/// Parse Layer Scaling - %LS0.8*
+/// Format: %LS[scale_factor]*%
+/// Example: %LS0.5* scales all subsequent coordinates by 0.5
+pub fn parse_ls(line: &str, state: &mut ParserState) {
+    // Extract scale value from %LS0.8*% format
+    let spec_str = line
+        .trim_start_matches('%')
+        .trim_end_matches('%')
+        .trim_end_matches('*');
+
+    if !spec_str.starts_with("LS") {
+        return;
+    }
+
+    let scale_str = &spec_str[2..]; // "0.8" part
+
+    if let Ok(scale) = scale_str.parse::<f32>() {
+        state.layer_scale = scale;
+    }
 }

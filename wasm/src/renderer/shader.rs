@@ -21,18 +21,33 @@ pub const ZERO: u32 = WebGl2RenderingContext::ZERO;
 // Shader sources
 pub const TRIANGLE_VERTEX_SHADER: &str = r#"#version 300 es
 in vec2 position;
+in vec2 hole_center_instance;
+in float hole_radius_instance;
 uniform mat3 transform;
+out lowp vec2 vPosition;
+out lowp vec2 vHoleCenter;
+out lowp float vHoleRadius;
 void main() {
     vec3 transformed = transform * vec3(position, 1.0);
     gl_Position = vec4(transformed.xy, 0.0, 1.0);
+    vPosition = position;
+    vHoleCenter = hole_center_instance;
+    vHoleRadius = hole_radius_instance;
 }
 "#;
 
 pub const TRIANGLE_FRAGMENT_SHADER: &str = r#"#version 300 es
 precision lowp float;
+in lowp vec2 vPosition;
+in lowp vec2 vHoleCenter;
+in lowp float vHoleRadius;
 uniform vec4 color;
 out vec4 fragColor;
 void main() {
+    if (vHoleRadius > 0.0) {
+        vec2 diff = vPosition - vHoleCenter;
+        if (dot(diff, diff) < vHoleRadius * vHoleRadius) discard;
+    }
     fragColor = color;
 }
 "#;
@@ -41,23 +56,36 @@ pub const CIRCLE_VERTEX_SHADER: &str = r#"#version 300 es
 in vec2 position;
 in vec2 center_instance;
 in float radius_instance;
+in vec2 hole_center_instance;
+in float hole_radius_instance;
 uniform mat3 transform;
 out lowp vec2 vPosition;
+out lowp vec2 vHoleCenter;
+out lowp float vHoleRadius;
 void main() {
     vec2 scaledPos = position * radius_instance + center_instance;
     vec3 transformed = transform * vec3(scaledPos, 1.0);
     gl_Position = vec4(transformed.xy, 0.0, 1.0);
     vPosition = position;
+    vHoleCenter = (hole_center_instance - center_instance) / radius_instance;
+    vHoleRadius = hole_radius_instance / radius_instance;
 }
 "#;
 
 pub const CIRCLE_FRAGMENT_SHADER: &str = r#"#version 300 es
 precision lowp float;
 in lowp vec2 vPosition;
+in lowp vec2 vHoleCenter;
+in lowp float vHoleRadius;
 uniform vec4 color;
 out vec4 fragColor;
 void main() {
-    if (dot(vPosition, vPosition) > 1.0) discard;
+    float dist = dot(vPosition, vPosition);
+    if (dist > 1.0) discard;
+    if (vHoleRadius > 0.0) {
+        vec2 diff = vPosition - vHoleCenter;
+        if (dot(diff, diff) < vHoleRadius * vHoleRadius) discard;
+    }
     fragColor = color;
 }
 "#;
@@ -259,7 +287,7 @@ impl ShaderPrograms {
             gl,
             TRIANGLE_VERTEX_SHADER,
             TRIANGLE_FRAGMENT_SHADER,
-            &["position"],
+            &["position", "hole_center_instance", "hole_radius_instance"],
             &["transform", "color"],
         )?;
 
@@ -267,7 +295,7 @@ impl ShaderPrograms {
             gl,
             CIRCLE_VERTEX_SHADER,
             CIRCLE_FRAGMENT_SHADER,
-            &["position", "center_instance", "radius_instance"],
+            &["position", "center_instance", "radius_instance", "hole_center_instance", "hole_radius_instance"],
             &["transform", "color"],
         )?;
 

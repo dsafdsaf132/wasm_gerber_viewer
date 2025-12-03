@@ -9,7 +9,7 @@ pub use state::{FormatSpec, ParserState, Polarity};
 // Internal use only
 use aperture::parse_aperture;
 use aperture_macro::{parse_macro, ApertureMacro};
-use state::{parse_format_spec, parse_if, parse_lp, parse_mo, parse_sr};
+use state::{parse_format_spec, parse_if, parse_lp, parse_ls, parse_mo, parse_sr};
 
 use crate::geometry::{parse_graphic_command, Primitive};
 use crate::shape::{Arcs, Boundary, Circles, GerberData, Thermals, Triangles};
@@ -128,9 +128,15 @@ impl GerberParser {
     fn primitives_to_gerber_data(primitives: &[Primitive]) -> GerberData {
         let mut triangle_vertices: Vec<f32> = Vec::new();
         let mut triangle_indices: Vec<u32> = Vec::new();
+        let mut triangle_hole_x: Vec<f32> = Vec::new();
+        let mut triangle_hole_y: Vec<f32> = Vec::new();
+        let mut triangle_hole_radius: Vec<f32> = Vec::new();
         let mut circles_x: Vec<f32> = Vec::new();
         let mut circles_y: Vec<f32> = Vec::new();
         let mut circles_radius: Vec<f32> = Vec::new();
+        let mut circles_hole_x: Vec<f32> = Vec::new();
+        let mut circles_hole_y: Vec<f32> = Vec::new();
+        let mut circles_hole_radius: Vec<f32> = Vec::new();
         let mut arcs_x: Vec<f32> = Vec::new();
         let mut arcs_y: Vec<f32> = Vec::new();
         let mut arcs_radius: Vec<f32> = Vec::new();
@@ -146,13 +152,13 @@ impl GerberParser {
 
         let mut vertex_offset: u32 = 0;
 
-        // Unit conversion: divide all values by 1000, same as JavaScript geometry.js
-        // This converts Gerber file internal units to millimeters
-        const TO_MM: f32 = 1.0 / 1000.0;
+        // Unit conversion: aperture.rs already converts to mm using unit_multiplier
+        // No additional conversion needed
+        const TO_MM: f32 = 1.0;
 
         for primitive in primitives {
             match primitive {
-                Primitive::Triangle { vertices, .. } => {
+                Primitive::Triangle { vertices, hole_x, hole_y, hole_radius, .. } => {
                     // Add triangle vertices to array (convert to mm units)
                     for vertex in vertices {
                         triangle_vertices.push(vertex[0] * TO_MM);
@@ -163,11 +169,21 @@ impl GerberParser {
                     triangle_indices.push(vertex_offset + 1);
                     triangle_indices.push(vertex_offset + 2);
                     vertex_offset += 3;
+
+                    // Add hole data for each vertex (3 times per triangle)
+                    for _ in 0..3 {
+                        triangle_hole_x.push(*hole_x * TO_MM);
+                        triangle_hole_y.push(*hole_y * TO_MM);
+                        triangle_hole_radius.push(*hole_radius * TO_MM);
+                    }
                 }
-                Primitive::Circle { x, y, radius, .. } => {
+                Primitive::Circle { x, y, radius, hole_x, hole_y, hole_radius, .. } => {
                     circles_x.push(*x * TO_MM);
                     circles_y.push(*y * TO_MM);
                     circles_radius.push(*radius * TO_MM);
+                    circles_hole_x.push(*hole_x * TO_MM);
+                    circles_hole_y.push(*hole_y * TO_MM);
+                    circles_hole_radius.push(*hole_radius * TO_MM);
                 }
                 Primitive::Arc {
                     x,
@@ -265,8 +281,8 @@ impl GerberParser {
         }
 
         GerberData::new(
-            Triangles::new(triangle_vertices, triangle_indices),
-            Circles::new(circles_x, circles_y, circles_radius),
+            Triangles::new(triangle_vertices, triangle_indices, triangle_hole_x, triangle_hole_y, triangle_hole_radius),
+            Circles::new(circles_x, circles_y, circles_radius, circles_hole_x, circles_hole_y, circles_hole_radius),
             Arcs::new(
                 arcs_x,
                 arcs_y,
@@ -355,7 +371,7 @@ fn parse_command(
         // TODO: Implement rotation transformation
     } else if line.starts_with("%LS") {
         // Layer scaling: %LS0.8*
-        // TODO: Implement scaling transformation
+        parse_ls(&line, state);
     } else {
         // Unknown or unsupported command
     }

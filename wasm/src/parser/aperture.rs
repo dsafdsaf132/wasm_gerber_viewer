@@ -63,22 +63,32 @@ pub fn parse_aperture(
     // Process basic Aperture formats (C, R, O, P)
     match shape.as_str() {
         "C" => {
-            // Circle: %ADD10C,0.20*%
+            // Circle: %ADD10C,0.20*% or with hole: %ADD10C,0.20X0.10*%
             if shape_and_params.len() > 1 {
-                if let Ok(diameter) = shape_and_params[1].trim().parse::<f32>() {
+                let params: Vec<&str> = shape_and_params[1].split('X').collect();
+                if let Ok(diameter) = params[0].trim().parse::<f32>() {
                     let diameter_mm = diameter * unit_multiplier;
+                    let hole_diameter_mm = if params.len() > 1 {
+                        params[1].trim().parse::<f32>().unwrap_or(0.0) * unit_multiplier
+                    } else {
+                        0.0
+                    };
+
                     aperture.radius = diameter_mm / 2.0;
                     aperture.primitives.push(Primitive::Circle {
                         x: 0.0,
                         y: 0.0,
                         radius: diameter_mm / 2.0,
                         exposure: 1.0,
+                        hole_x: 0.0,
+                        hole_y: 0.0,
+                        hole_radius: hole_diameter_mm / 2.0,
                     });
                 }
             }
         }
         "R" => {
-            // Rectangle: %ADD20R,0.5X0.3*%
+            // Rectangle: %ADD20R,0.5X0.3*% or with hole: %ADD20R,0.5X0.3X0.1*%
             if shape_and_params.len() > 1 {
                 let params: Vec<&str> = shape_and_params[1].split('X').collect();
                 if params.len() >= 2 {
@@ -88,8 +98,14 @@ pub fn parse_aperture(
                     ) {
                         let width_mm = width * unit_multiplier;
                         let height_mm = height * unit_multiplier;
-                        aperture.radius = width_mm.max(height_mm) / 2.0; // Half of the diagonal
-                                                                         // Split Rectangle into two triangles
+                        let hole_diameter_mm = if params.len() > 2 {
+                            params[2].trim().parse::<f32>().unwrap_or(0.0) * unit_multiplier
+                        } else {
+                            0.0
+                        };
+
+                        aperture.radius = width_mm.max(height_mm) / 2.0;
+                        // Split Rectangle into two triangles
                         let half_width = width_mm / 2.0;
                         let half_height = height_mm / 2.0;
 
@@ -101,17 +117,23 @@ pub fn parse_aperture(
                         aperture.primitives.push(Primitive::Triangle {
                             vertices: vec![v1, v2, v3],
                             exposure: 1.0,
+                            hole_x: 0.0,
+                            hole_y: 0.0,
+                            hole_radius: hole_diameter_mm / 2.0,
                         });
                         aperture.primitives.push(Primitive::Triangle {
                             vertices: vec![v1, v3, v4],
                             exposure: 1.0,
+                            hole_x: 0.0,
+                            hole_y: 0.0,
+                            hole_radius: hole_diameter_mm / 2.0,
                         });
                     }
                 }
             }
         }
         "O" => {
-            // Obround (rounded rectangle): %ADD30O,0.5X0.3*%
+            // Obround (rounded rectangle): %ADD30O,0.5X0.3*% or with hole: %ADD30O,0.5X0.3X0.1*%
             if shape_and_params.len() > 1 {
                 let params: Vec<&str> = shape_and_params[1].split('X').collect();
                 if params.len() >= 2 {
@@ -121,6 +143,12 @@ pub fn parse_aperture(
                     ) {
                         let width_mm = width * unit_multiplier;
                         let height_mm = height * unit_multiplier;
+                        let hole_diameter_mm = if params.len() > 2 {
+                            params[2].trim().parse::<f32>().unwrap_or(0.0) * unit_multiplier
+                        } else {
+                            0.0
+                        };
+
                         let short_side = width_mm.min(height_mm);
                         let long_side = width_mm.max(height_mm);
                         let radius = short_side / 2.0;
@@ -133,20 +161,26 @@ pub fn parse_aperture(
                             let half_rect_width = rect_width / 2.0;
                             let half_height = height_mm / 2.0;
 
-                            // Left circle (center: -half_rect_width, 0)
+                            // Left circle (center: -half_rect_width, 0), hole at aperture center (0, 0)
                             aperture.primitives.push(Primitive::Circle {
                                 x: -half_rect_width,
                                 y: 0.0,
                                 radius,
                                 exposure: 1.0,
+                                hole_x: 0.0,
+                                hole_y: 0.0,
+                                hole_radius: hole_diameter_mm / 2.0,
                             });
 
-                            // Right circle (center: half_rect_width, 0)
+                            // Right circle (center: half_rect_width, 0), hole at aperture center (0, 0)
                             aperture.primitives.push(Primitive::Circle {
                                 x: half_rect_width,
                                 y: 0.0,
                                 radius,
                                 exposure: 1.0,
+                                hole_x: 0.0,
+                                hole_y: 0.0,
+                                hole_radius: hole_diameter_mm / 2.0,
                             });
 
                             // Central rectangle (2 triangles)
@@ -158,10 +192,16 @@ pub fn parse_aperture(
                             aperture.primitives.push(Primitive::Triangle {
                                 vertices: vec![[x1, y1], [x2, y1], [x1, y2]],
                                 exposure: 1.0,
+                                hole_x: 0.0,
+                                hole_y: 0.0,
+                                hole_radius: hole_diameter_mm / 2.0,
                             });
                             aperture.primitives.push(Primitive::Triangle {
                                 vertices: vec![[x2, y1], [x2, y2], [x1, y2]],
                                 exposure: 1.0,
+                                hole_x: 0.0,
+                                hole_y: 0.0,
+                                hole_radius: hole_diameter_mm / 2.0,
                             });
                         } else {
                             // If height is greater - circles on the top and bottom, rectangle in the middle
@@ -169,20 +209,26 @@ pub fn parse_aperture(
                             let half_rect_height = rect_height / 2.0;
                             let half_width = width_mm / 2.0;
 
-                            // Bottom circle (center: 0, -half_rect_height)
+                            // Bottom circle (center: 0, -half_rect_height), hole at aperture center (0, 0)
                             aperture.primitives.push(Primitive::Circle {
                                 x: 0.0,
                                 y: -half_rect_height,
                                 radius,
                                 exposure: 1.0,
+                                hole_x: 0.0,
+                                hole_y: 0.0,
+                                hole_radius: hole_diameter_mm / 2.0,
                             });
 
-                            // Top circle (center: 0, half_rect_height)
+                            // Top circle (center: 0, half_rect_height), hole at aperture center (0, 0)
                             aperture.primitives.push(Primitive::Circle {
                                 x: 0.0,
                                 y: half_rect_height,
                                 radius,
                                 exposure: 1.0,
+                                hole_x: 0.0,
+                                hole_y: 0.0,
+                                hole_radius: hole_diameter_mm / 2.0,
                             });
 
                             // Central rectangle (2 triangles)
@@ -194,10 +240,16 @@ pub fn parse_aperture(
                             aperture.primitives.push(Primitive::Triangle {
                                 vertices: vec![[x1, y1], [x2, y1], [x1, y2]],
                                 exposure: 1.0,
+                                hole_x: 0.0,
+                                hole_y: 0.0,
+                                hole_radius: hole_diameter_mm / 2.0,
                             });
                             aperture.primitives.push(Primitive::Triangle {
                                 vertices: vec![[x2, y1], [x2, y2], [x1, y2]],
                                 exposure: 1.0,
+                                hole_x: 0.0,
+                                hole_y: 0.0,
+                                hole_radius: hole_diameter_mm / 2.0,
                             });
                         }
                     }
@@ -205,7 +257,8 @@ pub fn parse_aperture(
             }
         }
         "P" => {
-            // Polygon: %ADD40P,0.5X5*% (diameter 0.5, 5-sided)
+            // Polygon: %ADD40P,0.5X5*% or with rotation: %ADD40P,0.5X5X45.0*% or with hole: %ADD40P,0.5X5X0X0.1*%
+            // Parameters: diameter X vertices [X rotation] [X hole_diameter]
             if shape_and_params.len() > 1 {
                 let params: Vec<&str> = shape_and_params[1].split('X').collect();
                 if params.len() >= 2 {
@@ -214,6 +267,16 @@ pub fn parse_aperture(
                         params[1].trim().parse::<f32>(),
                     ) {
                         let diameter_mm = diameter * unit_multiplier;
+                        // If 4+ parameters: params[2]=rotation, params[3]=hole
+                        // If 3 parameters: params[2]=hole (rotation defaults to 0)
+                        let hole_diameter_mm = if params.len() > 3 {
+                            params[3].trim().parse::<f32>().unwrap_or(0.0) * unit_multiplier
+                        } else if params.len() > 2 {
+                            params[2].trim().parse::<f32>().unwrap_or(0.0) * unit_multiplier
+                        } else {
+                            0.0
+                        };
+
                         aperture.radius = diameter_mm / 2.0;
                         let radius = diameter_mm / 2.0;
                         let num_vertices = num_vertices as u32;
@@ -233,6 +296,9 @@ pub fn parse_aperture(
                             aperture.primitives.push(Primitive::Triangle {
                                 vertices: vec![[0.0, 0.0], [x1, y1], [x2, y2]],
                                 exposure: 1.0,
+                                hole_x: 0.0,
+                                hole_y: 0.0,
+                                hole_radius: hole_diameter_mm / 2.0,
                             });
                         }
                     }

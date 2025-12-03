@@ -13,11 +13,15 @@ pub struct BufferCache {
     pub triangle_vao: Option<WebGlVertexArrayObject>,
     pub triangle_vertex_buffer: Option<WebGlBuffer>,
     pub triangle_index_buffer: Option<WebGlBuffer>,
+    pub triangle_hole_center_buffer: Option<WebGlBuffer>,
+    pub triangle_hole_radius_buffer: Option<WebGlBuffer>,
 
     // Circles cache
     pub circle_vao: Option<WebGlVertexArrayObject>,
     pub circle_center_buffer: Option<WebGlBuffer>,
     pub circle_radius_buffer: Option<WebGlBuffer>,
+    pub circle_hole_center_buffer: Option<WebGlBuffer>,
+    pub circle_hole_radius_buffer: Option<WebGlBuffer>,
 
     // Arcs cache
     pub arc_vao: Option<WebGlVertexArrayObject>,

@@ -4,11 +4,14 @@ use wasm_bindgen::prelude::*;
 pub struct Triangles {
     pub(crate) vertices: Vec<f32>,
     pub(crate) indices: Vec<u32>,
+    pub(crate) hole_x: Vec<f32>,
+    pub(crate) hole_y: Vec<f32>,
+    pub(crate) hole_radius: Vec<f32>,
 }
 
 impl Triangles {
-    pub fn new(vertices: Vec<f32>, indices: Vec<u32>) -> Triangles {
-        Triangles { vertices, indices }
+    pub fn new(vertices: Vec<f32>, indices: Vec<u32>, hole_x: Vec<f32>, hole_y: Vec<f32>, hole_radius: Vec<f32>) -> Triangles {
+        Triangles { vertices, indices, hole_x, hole_y, hole_radius }
     }
 }
 
@@ -17,11 +20,14 @@ pub struct Circles {
     pub(crate) x: Vec<f32>,
     pub(crate) y: Vec<f32>,
     pub(crate) radius: Vec<f32>,
+    pub(crate) hole_x: Vec<f32>,
+    pub(crate) hole_y: Vec<f32>,
+    pub(crate) hole_radius: Vec<f32>,
 }
 
 impl Circles {
-    pub fn new(x: Vec<f32>, y: Vec<f32>, radius: Vec<f32>) -> Circles {
-        Circles { x, y, radius }
+    pub fn new(x: Vec<f32>, y: Vec<f32>, radius: Vec<f32>, hole_x: Vec<f32>, hole_y: Vec<f32>, hole_radius: Vec<f32>) -> Circles {
+        Circles { x, y, radius, hole_x, hole_y, hole_radius }
     }
 }
 

@@ -390,6 +390,9 @@ pub fn parse_primitive_statement(
                 y: center_y,
                 radius: diameter / 2.0,
                 exposure,
+                hole_x: center_x,
+                hole_y: center_y,
+                hole_radius: 0.0, // Macros don't support holes in circle primitives
             });
 
             Some(1)
@@ -487,6 +490,9 @@ pub fn parse_primitive_statement(
                 let mut triangle = Primitive::Triangle {
                     vertices: vec![[center_x, center_y], vertices[i], vertices[next_i]],
                     exposure,
+                    hole_x: 0.0,
+                    hole_y: 0.0,
+                    hole_radius: 0.0, // Macros don't support holes in outline primitives
                 };
 
                 // Apply rotation
@@ -600,10 +606,16 @@ pub fn parse_primitive_statement(
             let mut tri1 = Primitive::Triangle {
                 vertices: vec![v1, v2, v3],
                 exposure,
+                hole_x: 0.0,
+                hole_y: 0.0,
+                hole_radius: 0.0,
             };
             let mut tri2 = Primitive::Triangle {
                 vertices: vec![v1, v3, v4],
                 exposure,
+                hole_x: 0.0,
+                hole_y: 0.0,
+                hole_radius: 0.0,
             };
 
             // Apply rotation
