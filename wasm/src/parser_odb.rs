@@ -79,20 +79,40 @@ impl OdbParser {
                     x,
                     y,
                     radius,
+                    exposure,
+                    hole_x,
+                    hole_y,
+                    hole_radius,
                 } => {
+                    // Skip if negative exposure (for now, can be enhanced later)
+                    if *exposure < 0.5 {
+                        continue;
+                    }
+
                     circles_x.push(*x);
                     circles_y.push(*y);
                     circles_radius.push(*radius);
-                    circles_holes_x.push(0.0);
-                    circles_holes_y.push(0.0);
-                    circles_holes_radius.push(0.0);
+                    circles_holes_x.push(*hole_x);
+                    circles_holes_y.push(*hole_y);
+                    circles_holes_radius.push(*hole_radius);
 
                     min_x = min_x.min(x - radius);
                     max_x = max_x.max(x + radius);
                     min_y = min_y.min(y - radius);
                     max_y = max_y.max(y + radius);
                 }
-                Primitive::Triangle { vertices } => {
+                Primitive::Triangle {
+                    vertices,
+                    exposure,
+                    hole_x,
+                    hole_y,
+                    hole_radius,
+                } => {
+                    // Skip if negative exposure (for now)
+                    if *exposure < 0.5 {
+                        continue;
+                    }
+
                     let index_offset = (triangles_vertices.len() / 2) as u32;
                     for vertex in vertices {
                         triangles_vertices.push(vertex[0]);
@@ -111,23 +131,30 @@ impl OdbParser {
                         triangles_indices.push(index_offset + 2);
                     }
 
-                    triangles_holes_x.push(0.0);
-                    triangles_holes_y.push(0.0);
-                    triangles_holes_radius.push(0.0);
+                    triangles_holes_x.push(*hole_x);
+                    triangles_holes_y.push(*hole_y);
+                    triangles_holes_radius.push(*hole_radius);
                 }
                 Primitive::Arc {
                     x,
                     y,
                     radius,
                     start_angle,
-                    sweep_angle,
+                    end_angle,
                     thickness,
+                    exposure,
                 } => {
+                    // Skip if negative exposure (for now)
+                    if *exposure < 0.5 {
+                        continue;
+                    }
+
                     arcs_x.push(*x);
                     arcs_y.push(*y);
                     arcs_radius.push(*radius);
                     arcs_start_angle.push(*start_angle);
-                    arcs_sweep_angle.push(*sweep_angle);
+                    let sweep = end_angle - start_angle;
+                    arcs_sweep_angle.push(sweep);
                     arcs_thickness.push(*thickness);
 
                     min_x = min_x.min(x - radius - thickness / 2.0);

@@ -3,17 +3,33 @@ use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
 /// Primitive shape created from ODB++ features
+/// Matches Gerber primitive structure with exposure field for polarity
 #[derive(Clone, Debug)]
 pub enum Primitive {
-    Circle { x: f32, y: f32, radius: f32 },
-    Triangle { vertices: Vec<[f32; 2]> },
+    Circle {
+        x: f32,
+        y: f32,
+        radius: f32,
+        exposure: f32,     // 1.0 = positive, 0.0 = negative
+        hole_x: f32,       // Hole center X (absolute position)
+        hole_y: f32,       // Hole center Y (absolute position)
+        hole_radius: f32,  // Hole radius (0.0 = no hole)
+    },
+    Triangle {
+        vertices: Vec<[f32; 2]>,
+        exposure: f32,     // 1.0 = positive, 0.0 = negative
+        hole_x: f32,       // Hole center X (relative to triangle)
+        hole_y: f32,       // Hole center Y (relative to triangle)
+        hole_radius: f32,  // Hole radius (0.0 = no hole)
+    },
     Arc {
         x: f32,
         y: f32,
         radius: f32,
         start_angle: f32,
-        sweep_angle: f32,
+        end_angle: f32,
         thickness: f32,
+        exposure: f32,     // 1.0 = positive, 0.0 = negative
     },
 }
 
@@ -87,7 +103,7 @@ fn parse_pad(
     parts: &[&str],
     symbols: &HashMap<String, Symbol>,
 ) -> Result<Primitive, JsValue> {
-    if parts.len() < 7 {
+    if parts.len() < 8 {
         return Err(JsValue::from_str("Invalid Pad format"));
     }
 
@@ -100,7 +116,21 @@ fn parse_pad(
     let _rotation = parts[3]
         .parse::<f32>()
         .map_err(|_| JsValue::from_str("Invalid Pad rotation"))?;
+    let _mirror_x = parts[4]
+        .parse::<f32>()
+        .map_err(|_| JsValue::from_str("Invalid Pad mirror_x"))?;
+    let _mirror_y = parts[5]
+        .parse::<f32>()
+        .map_err(|_| JsValue::from_str("Invalid Pad mirror_y"))?;
     let symbol_id = parts[6];
+    let polarity_str = parts[7];
+
+    // Parse polarity: 0 = positive, 1 = negative (or similar)
+    let exposure = if polarity_str == "0" || polarity_str == "1" {
+        1.0
+    } else {
+        0.0
+    };
 
     let symbol = symbols
         .get(symbol_id)
@@ -112,30 +142,45 @@ fn parse_pad(
                 x,
                 y,
                 radius: diameter / 2.0,
+                exposure,
+                hole_x: 0.0,
+                hole_y: 0.0,
+                hole_radius: 0.0,
             })
         }
         SymbolShape::Square(size) => {
-            // Convert square to triangle (actually 4 triangles make a square, but for simplicity use one)
+            // Convert square to triangles
             let half = size / 2.0;
+            let v1 = [x - half, y - half];
+            let v2 = [x + half, y - half];
+            let v3 = [x + half, y + half];
+            let _v4 = [x - half, y + half];
+
+            // Return first triangle: (v1, v2, v3)
             Ok(Primitive::Triangle {
-                vertices: vec![
-                    [x - half, y - half],
-                    [x + half, y - half],
-                    [x + half, y + half],
-                    [x - half, y + half],
-                ],
+                vertices: vec![v1, v2, v3],
+                exposure,
+                hole_x: 0.0,
+                hole_y: 0.0,
+                hole_radius: 0.0,
             })
         }
         SymbolShape::Rectangle(width, height) => {
+            // Convert rectangle to triangles
             let half_w = width / 2.0;
             let half_h = height / 2.0;
+            let v1 = [x - half_w, y - half_h];
+            let v2 = [x + half_w, y - half_h];
+            let v3 = [x + half_w, y + half_h];
+            let _v4 = [x - half_w, y + half_h];
+
+            // Return first triangle: (v1, v2, v3)
             Ok(Primitive::Triangle {
-                vertices: vec![
-                    [x - half_w, y - half_h],
-                    [x + half_w, y - half_h],
-                    [x + half_w, y + half_h],
-                    [x - half_w, y + half_h],
-                ],
+                vertices: vec![v1, v2, v3],
+                exposure,
+                hole_x: 0.0,
+                hole_y: 0.0,
+                hole_radius: 0.0,
             })
         }
         SymbolShape::Obround(width, height) => {
@@ -145,19 +190,29 @@ fn parse_pad(
                 x,
                 y,
                 radius: avg_radius,
+                exposure,
+                hole_x: 0.0,
+                hole_y: 0.0,
+                hole_radius: 0.0,
             })
         }
         SymbolShape::Polygon(sides, diameter) => {
             let radius = diameter / 2.0;
             let vertices = generate_polygon_vertices(x, y, *sides, radius);
-            Ok(Primitive::Triangle { vertices })
+            Ok(Primitive::Triangle {
+                vertices,
+                exposure,
+                hole_x: 0.0,
+                hole_y: 0.0,
+                hole_radius: 0.0,
+            })
         }
     }
 }
 
-/// Parse Arc (A) feature: A <cx> <cy> <radius> <start_angle> <sweep_angle> <width> <symbol> <polarity> <attributes>
+/// Parse Arc (A) feature: A <cx> <cy> <radius> <start_angle> <sweep_angle> <width> <polarity> <attributes>
 fn parse_arc(parts: &[&str], _symbols: &HashMap<String, Symbol>) -> Result<Primitive, JsValue> {
-    if parts.len() < 7 {
+    if parts.len() < 8 {
         return Err(JsValue::from_str("Invalid Arc format"));
     }
 
@@ -179,18 +234,26 @@ fn parse_arc(parts: &[&str], _symbols: &HashMap<String, Symbol>) -> Result<Primi
     let thickness = parts[6]
         .parse::<f32>()
         .map_err(|_| JsValue::from_str("Invalid Arc thickness"))?;
+    let polarity_str = parts[7];
 
-    // Convert degrees to radians
-    let start_rad = start_angle.to_radians();
-    let sweep_rad = sweep_angle.to_radians();
+    // Parse polarity
+    let exposure = if polarity_str == "0" || polarity_str == "1" {
+        1.0
+    } else {
+        0.0
+    };
+
+    // Calculate end angle from sweep angle
+    let end_angle = start_angle + sweep_angle;
 
     Ok(Primitive::Arc {
         x,
         y,
         radius,
-        start_angle: start_rad,
-        sweep_angle: sweep_rad,
+        start_angle,
+        end_angle,
         thickness,
+        exposure,
     })
 }
 
@@ -199,7 +262,7 @@ fn parse_line(
     parts: &[&str],
     symbols: &HashMap<String, Symbol>,
 ) -> Result<Primitive, JsValue> {
-    if parts.len() < 7 {
+    if parts.len() < 8 {
         return Err(JsValue::from_str("Invalid Line format"));
     }
 
@@ -219,35 +282,48 @@ fn parse_line(
         .parse::<f32>()
         .map_err(|_| JsValue::from_str("Invalid Line width"))?;
     let symbol_id = parts[6];
+    let polarity_str = parts[7];
 
     let _symbol = symbols
         .get(symbol_id)
         .ok_or(JsValue::from_str("Symbol not found"))?;
 
-    // Create line as a thin rectangle
+    // Parse polarity
+    let exposure = if polarity_str == "0" || polarity_str == "1" {
+        1.0
+    } else {
+        0.0
+    };
+
+    // Create line as 2 triangles (like Gerber line_to_triangles)
     let dx = x2 - x1;
     let dy = y2 - y1;
     let length = (dx * dx + dy * dy).sqrt();
 
     if length < 0.001 {
-        // Degenerate line, treat as a point
-        return parse_pad(&["P", &x1.to_string(), &y1.to_string(), "0", "0", "0", symbol_id], symbols);
+        // Degenerate line, skip it
+        return Err(JsValue::from_str("Degenerate line"));
     }
 
-    // Normalize direction
-    let nx = -dy / length;
-    let ny = dx / length;
-
+    // Perpendicular vector (width direction)
     let half_width = width / 2.0;
+    let perp_x = -dy / length * half_width;
+    let perp_y = dx / length * half_width;
 
-    let vertices = vec![
-        [x1 + nx * half_width, y1 + ny * half_width],
-        [x2 + nx * half_width, y2 + ny * half_width],
-        [x2 - nx * half_width, y2 - ny * half_width],
-        [x1 - nx * half_width, y1 - ny * half_width],
-    ];
+    // 4 vertices on both sides of the line
+    let v1 = [x1 + perp_x, y1 + perp_y];
+    let v2 = [x1 - perp_x, y1 - perp_y];
+    let v3 = [x2 + perp_x, y2 + perp_y];
+    let _v4 = [x2 - perp_x, y2 - perp_y];
 
-    Ok(Primitive::Triangle { vertices })
+    // Return first triangle: (v1, v2, v3)
+    Ok(Primitive::Triangle {
+        vertices: vec![v1, v2, v3],
+        exposure,
+        hole_x: 0.0,
+        hole_y: 0.0,
+        hole_radius: 0.0,
+    })
 }
 
 /// Parse Surface (S) feature: S <vertices>... <polarity> <attributes>
@@ -276,12 +352,24 @@ fn parse_surface(parts: &[&str]) -> Result<Vec<Primitive>, JsValue> {
         return Err(JsValue::from_str("Surface needs at least 3 vertices"));
     }
 
+    // Get polarity from remaining parts
+    let polarity_str = if i < parts.len() { parts[i] } else { "0" };
+    let exposure = if polarity_str == "0" || polarity_str == "1" {
+        1.0
+    } else {
+        0.0
+    };
+
     // Simple triangulation: create triangle from first three vertices and fan out
     let mut primitives = Vec::new();
     for j in 1..vertices.len() - 1 {
         let triangle_vertices = vec![vertices[0], vertices[j], vertices[j + 1]];
         primitives.push(Primitive::Triangle {
             vertices: triangle_vertices,
+            exposure,
+            hole_x: 0.0,
+            hole_y: 0.0,
+            hole_radius: 0.0,
         });
     }
 
