@@ -228,6 +228,9 @@ export class GerberViewer {
 
   async handleOdbFile(file) {
     try {
+      // Reset ODB++ parser before processing new file
+      this.wasmProcessor.reset_odb();
+
       // Unzip the ODB++ file using JSZip
       const zipData = await JSZip.loadAsync(file);
 
@@ -242,7 +245,18 @@ export class GerberViewer {
         throw new Error('No features files found in ODB++ archive');
       }
 
-      // Process each layer's features file
+      // Read global symbols (steps/<step_name>/symbols)
+      let globalSymbols = '';
+      const globalSymbolsPath = fileList.find(f =>
+        f.match(/steps\/[^/]+\/symbols$/i) && !f.includes('/layers/')
+      );
+      if (globalSymbolsPath && zipData.file(globalSymbolsPath)) {
+        globalSymbols = await zipData.file(globalSymbolsPath).async('text');
+      }
+
+      // Collect all layer data before adding
+      const layersData = [];
+
       for (const featuresPath of featuresFiles) {
         try {
           // Extract layer name from path: steps/<step_name>/layers/<layer_name>/features
@@ -252,62 +266,80 @@ export class GerberViewer {
           // Read features file
           const featuresContent = await zipData.file(featuresPath).async('text');
 
-          // Find corresponding symbols file (in same directory)
+          // Find corresponding symbols file (in same directory - layer-specific symbols)
           const dir = featuresPath.substring(0, featuresPath.lastIndexOf('/'));
-          const symbolsPath = dir + '/symbols';
+          const layerSymbolsPath = dir + '/symbols';
 
-          let symbolsContent = '';
-          if (zipData.file(symbolsPath)) {
-            symbolsContent = await zipData.file(symbolsPath).async('text');
-          } else {
-            // If no symbols file, create empty one
-            symbolsContent = '';
+          let layerSymbols = '';
+          if (zipData.file(layerSymbolsPath)) {
+            layerSymbols = await zipData.file(layerSymbolsPath).async('text');
           }
 
-          // Add ODB++ layer
-          await this.addOdbLayer(layerName, featuresContent, symbolsContent);
+          // Combine global symbols + layer-specific symbols
+          const symbolsContent = globalSymbols + '\n' + layerSymbols;
+
+          layersData.push({
+            name: layerName,
+            featuresContent,
+            symbolsContent
+          });
         } catch (error) {
           console.error(`Failed to process layer from ${featuresPath}:`, error);
         }
+      }
+
+      // Add all ODB++ layers and get their IDs
+      const layerIds = await this.addOdbLayers(layersData);
+
+      if (layerIds.length === 0) {
+        throw new Error('Failed to add any ODB++ layers');
       }
     } catch (error) {
       throw new Error(`Failed to extract ODB++ file: ${error.message}`);
     }
   }
 
-  async addOdbLayer(name, featuresContent, symbolsContent) {
-    try {
-      // Call ODB++ parser in WASM
-      const layerId = this.wasmProcessor.add_odb_layer(featuresContent, symbolsContent);
-      if (layerId === undefined || layerId === null) {
-        throw new Error("Failed to get layer ID from ODB++ parser");
+  async addOdbLayers(layersData) {
+    const layerIds = [];
+
+    for (const { name, featuresContent, symbolsContent } of layersData) {
+      try {
+        // Call ODB++ parser in WASM and get layer ID
+        const layerId = this.wasmProcessor.add_odb_layer(featuresContent, symbolsContent);
+        if (layerId === undefined || layerId === null) {
+          console.error(`Failed to get layer ID for ${name}`);
+          continue;
+        }
+
+        // Get layer boundary
+        const bounds = this.wasmProcessor.get_boundary();
+
+        const color =
+          this.colorPalette[this.nextColorIndex % this.colorPalette.length];
+        this.nextColorIndex++;
+
+        const layer = {
+          id: `layer-${layerId}`,
+          layerId: layerId,
+          name: `${name} (ODB++)`,
+          visible: true,
+          color: color,
+          bounds: {
+            minX: bounds.min_x,
+            maxX: bounds.max_x,
+            minY: bounds.min_y,
+            maxY: bounds.max_y,
+          },
+        };
+
+        this.layers.push(layer);
+        layerIds.push(layerId);
+      } catch (error) {
+        console.error(`Failed to add ODB++ layer ${name}:`, error);
       }
-
-      // Get layer boundary
-      const bounds = this.wasmProcessor.get_boundary();
-
-      const color =
-        this.colorPalette[this.nextColorIndex % this.colorPalette.length];
-      this.nextColorIndex++;
-
-      const layer = {
-        id: `layer-${layerId}`,
-        layerId: layerId,
-        name: `${name} (ODB++)`,
-        visible: true,
-        color: color,
-        bounds: {
-          minX: bounds.min_x,
-          maxX: bounds.max_x,
-          minY: bounds.min_y,
-          maxY: bounds.max_y,
-        },
-      };
-
-      this.layers.push(layer);
-    } catch (error) {
-      throw new Error(`Failed to add ODB++ layer: ${error.message}`);
     }
+
+    return layerIds;
   }
 
   async addLayer(name, content) {

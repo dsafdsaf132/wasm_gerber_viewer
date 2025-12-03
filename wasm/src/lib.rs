@@ -91,7 +91,7 @@ impl GerberProcessor {
     ///
     /// # Arguments
     /// * `features_content` - Features file content as string
-    /// * `symbols_content` - Symbols definition content as string
+    /// * `symbols_content` - Symbols definition content (global + layer-specific combined)
     ///
     /// # Returns
     /// * Layer ID (u32) for tracking this layer
@@ -122,6 +122,18 @@ impl GerberProcessor {
                 "Renderer not initialized. Call init() first.",
             ))
         }
+    }
+
+    /// Reset ODB++ parser state (clears any cached ODB++ specific data)
+    /// This is useful when starting to parse a new ODB++ file
+    ///
+    /// # Returns
+    /// * `"reset_odb_done"` signal on success
+    pub fn reset_odb(&mut self) -> Result<String, JsValue> {
+        // Currently, since we create a new OdbParser for each file,
+        // there's no persistent state to reset. This method is provided
+        // for future compatibility if we add stateful ODB++ parsing.
+        Ok("reset_odb_done".to_string())
     }
 
     /// Remove a layer from the renderer
