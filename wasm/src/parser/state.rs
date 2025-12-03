@@ -37,6 +37,7 @@ impl Default for FormatSpec {
     }
 }
 
+#[derive(Clone)]
 pub struct ParserState {
     pub x: f32,
     pub y: f32,
@@ -62,6 +63,12 @@ pub struct ParserState {
     // Layer Mirroring
     pub mirror_x: bool,
     pub mirror_y: bool,
+    // Layer Rotation (radians)
+    pub rotation_angle: f32,
+    // Aperture Block
+    pub in_aperture_block: bool,
+    pub block_aperture_code: String,
+    pub block_commands: Vec<String>,
 }
 
 impl Default for ParserState {
@@ -88,6 +95,10 @@ impl Default for ParserState {
             layer_scale: 1.0,
             mirror_x: false,
             mirror_y: false,
+            rotation_angle: 0.0,
+            in_aperture_block: false,
+            block_aperture_code: String::new(),
+            block_commands: Vec::new(),
         }
     }
 }
@@ -393,5 +404,28 @@ pub fn parse_lm(line: &str, state: &mut ParserState) {
             state.mirror_y = true;
         }
         _ => {}
+    }
+}
+
+/// Parse Layer Rotation - %LR0.0*%, %LR45.0*%, %LR90.0*%
+/// Format: %LR[angle_degrees]*%
+/// - 0.0: No rotation (default)
+/// - Positive values: Counter-clockwise rotation
+/// - Example: %LR45.0* rotates 45 degrees counter-clockwise
+pub fn parse_lr(line: &str, state: &mut ParserState) {
+    let spec_str = line
+        .trim_start_matches('%')
+        .trim_end_matches('%')
+        .trim_end_matches('*');
+
+    if !spec_str.starts_with("LR") {
+        return;
+    }
+
+    let angle_str = &spec_str[2..]; // "45.0" part
+
+    if let Ok(angle_degrees) = angle_str.parse::<f32>() {
+        // Convert degrees to radians
+        state.rotation_angle = angle_degrees * std::f32::consts::PI / 180.0;
     }
 }

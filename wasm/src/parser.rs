@@ -10,7 +10,7 @@ pub use state::{FormatSpec, ParserState, Polarity};
 // Internal use only
 use aperture::parse_aperture;
 use aperture_macro::{parse_macro, ApertureMacro};
-use state::{parse_format_spec, parse_if, parse_lm, parse_lp, parse_ls, parse_mo, parse_sr};
+use state::{parse_format_spec, parse_if, parse_lm, parse_lp, parse_lr, parse_ls, parse_mo, parse_sr};
 
 use self::geometry::{parse_graphic_command, Primitive};
 use crate::shape::{Arcs, Boundary, Circles, GerberData, Thermals, Triangles};
@@ -332,6 +332,86 @@ impl GerberParser {
     }
 }
 
+/// Parse block commands and create an aperture from the resulting primitives
+fn create_block_aperture(
+    block_commands: &[String],
+    state: &ParserState,
+    apertures: &HashMap<String, Aperture>,
+) -> Aperture {
+    // Create temporary state for parsing block commands
+    let mut temp_state = state.clone();
+    temp_state.x = 0.0;
+    temp_state.y = 0.0;
+
+    // Create temporary primitives vector
+    let mut temp_primitives = Vec::new();
+    let mut temp_region_contours = Vec::new();
+
+    // Parse each command in the block
+    for command in block_commands {
+        let cmd = command.trim();
+        if cmd.is_empty() {
+            continue;
+        }
+
+        // Parse graphic commands (G/D/XY codes)
+        if cmd.starts_with('G')
+            || cmd.starts_with('D')
+            || cmd.starts_with('X')
+            || cmd.starts_with('Y')
+            || cmd.starts_with('I')
+            || cmd.starts_with('J')
+        {
+            parse_graphic_command(
+                cmd,
+                &mut temp_state,
+                apertures,
+                &mut temp_primitives,
+                &mut temp_region_contours,
+            );
+        }
+    }
+
+    // Calculate radius (max distance from origin to any primitive point)
+    let mut max_radius = 0.0_f32;
+    for primitive in &temp_primitives {
+        match primitive {
+            Primitive::Circle { x, y, radius, .. } => {
+                let dist = (x * x + y * y).sqrt() + radius;
+                max_radius = max_radius.max(dist);
+            }
+            Primitive::Triangle { vertices, .. } => {
+                for vertex in vertices {
+                    let dist = (vertex[0] * vertex[0] + vertex[1] * vertex[1]).sqrt();
+                    max_radius = max_radius.max(dist);
+                }
+            }
+            Primitive::Arc { x, y, radius, .. } => {
+                let dist = (x * x + y * y).sqrt() + radius;
+                max_radius = max_radius.max(dist);
+            }
+            Primitive::Thermal { x, y, outer_diameter, .. } => {
+                let dist = (x * x + y * y).sqrt() + outer_diameter / 2.0;
+                max_radius = max_radius.max(dist);
+            }
+        }
+    }
+
+    // Check if any primitives are negative
+    let has_negative = temp_primitives.iter().any(|p| match p {
+        Primitive::Circle { exposure, .. } => *exposure < 0.5,
+        Primitive::Triangle { exposure, .. } => *exposure < 0.5,
+        Primitive::Arc { exposure, .. } => *exposure < 0.5,
+        Primitive::Thermal { exposure, .. } => *exposure < 0.5,
+    });
+
+    Aperture {
+        radius: max_radius,
+        primitives: temp_primitives,
+        has_negative,
+    }
+}
+
 fn parse_command(
     line_ref: &str,
     i: &mut usize,
@@ -396,13 +476,35 @@ fn parse_command(
         parse_if(&line, state);
     } else if line.starts_with("%AB") {
         // Block Aperture: %ABD##*% ... %AB*%
-        // TODO: Implement full block aperture support
+        let content = line.trim_start_matches('%').trim_end_matches('*').trim_end_matches('%');
+
+        if content == "AB" {
+            // End of block definition: %AB*%
+            if state.in_aperture_block {
+                // Parse block_commands and create block aperture
+                let block_aperture = create_block_aperture(&state.block_commands, state, apertures);
+                apertures.insert(state.block_aperture_code.clone(), block_aperture);
+                state.in_aperture_block = false;
+                state.block_commands.clear();
+            }
+        } else if content.starts_with("ABD") {
+            // Start of block definition: %ABD##*%
+            let d_code = &content[3..]; // Extract D-code number
+            state.in_aperture_block = true;
+            state.block_aperture_code = format!("D{}", d_code);
+            state.block_commands.clear();
+        }
+        return; // Don't process further
+    } else if state.in_aperture_block {
+        // Inside aperture block - store commands
+        state.block_commands.push(line.to_string());
+        return; // Don't process commands while in block mode
     } else if line.starts_with("%LM") {
         // Layer mirroring: %LMN*, %LMX*, %LMY*, %LMXY*
         parse_lm(&line, state);
     } else if line.starts_with("%LR") {
         // Layer rotation: %LR45.0*
-        // TODO: Implement rotation transformation
+        parse_lr(&line, state);
     } else if line.starts_with("%LS") {
         // Layer scaling: %LS0.8*
         parse_ls(&line, state);

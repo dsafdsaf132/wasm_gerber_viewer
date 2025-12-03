@@ -946,6 +946,16 @@ pub fn parse_graphic_command(
         };
     }
 
+    // Apply rotation transformation (after mirroring)
+    if state.rotation_angle != 0.0 {
+        let cos_a = state.rotation_angle.cos();
+        let sin_a = state.rotation_angle.sin();
+        let rotated_x = x * cos_a - y * sin_a;
+        let rotated_y = x * sin_a + y * cos_a;
+        x = rotated_x;
+        y = rotated_y;
+    }
+
     // Process I coordinate (arc center X offset)
     if let Some(i_val) = i_match.as_ref() {
         let mut raw_i =
@@ -974,6 +984,16 @@ pub fn parse_graphic_command(
         } else {
             raw_j
         };
+    }
+
+    // Apply rotation to I, J offsets
+    if state.rotation_angle != 0.0 && (i != 0.0 || j != 0.0) {
+        let cos_a = state.rotation_angle.cos();
+        let sin_a = state.rotation_angle.sin();
+        let rotated_i = i * cos_a - j * sin_a;
+        let rotated_j = i * sin_a + j * cos_a;
+        i = rotated_i;
+        j = rotated_j;
     }
 
     // Process D-code
