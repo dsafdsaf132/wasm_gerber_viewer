@@ -184,4 +184,12 @@ impl GerberData {
             boundary,
         }
     }
+
+    /// Check if this GerberData contains any geometry
+    pub fn has_geometry(&self) -> bool {
+        !self.triangles.indices.is_empty()
+            || !self.circles.x.is_empty()
+            || !self.arcs.x.is_empty()
+            || !self.thermals.x.is_empty()
+    }
 }

@@ -57,9 +57,22 @@ impl GerberProcessor {
         // Parse Gerber content to get Vec<GerberData> (one per polarity layer)
         let gerber_data_layers = parse_gerber(&content)?;
 
+        // Filter out empty layers (layers with no geometry)
+        let non_empty_layers: Vec<_> = gerber_data_layers
+            .into_iter()
+            .filter(|layer| layer.has_geometry())
+            .collect();
+
+        // If no non-empty layers found, reject the file as invalid Gerber
+        if non_empty_layers.is_empty() {
+            return Err(JsValue::from_str(
+                "File does not contain valid Gerber data (no geometry found)",
+            ));
+        }
+
         // Add to renderer
         if let Some(renderer) = &mut self.renderer {
-            let layer_index = renderer.add_layer(gerber_data_layers)?;
+            let layer_index = renderer.add_layer(non_empty_layers)?;
             self.next_layer_id += 1;
 
             // For now, layer_id matches layer_index
