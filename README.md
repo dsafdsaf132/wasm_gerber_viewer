@@ -77,8 +77,6 @@ The following Gerber commands are not yet implemented
 - **%AB** - Aperture Block definitions
 - **%LM** - Layer Mirroring (X, Y, XY axes)
 - **%LR** - Layer Rotation transformations
-- **%LS** - Layer Scaling transformations
-- **%SR** - Step and Repeat operations
 
 ## License
 

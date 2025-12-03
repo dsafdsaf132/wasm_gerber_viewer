@@ -10,8 +10,20 @@ pub struct Triangles {
 }
 
 impl Triangles {
-    pub fn new(vertices: Vec<f32>, indices: Vec<u32>, hole_x: Vec<f32>, hole_y: Vec<f32>, hole_radius: Vec<f32>) -> Triangles {
-        Triangles { vertices, indices, hole_x, hole_y, hole_radius }
+    pub fn new(
+        vertices: Vec<f32>,
+        indices: Vec<u32>,
+        hole_x: Vec<f32>,
+        hole_y: Vec<f32>,
+        hole_radius: Vec<f32>,
+    ) -> Triangles {
+        Triangles {
+            vertices,
+            indices,
+            hole_x,
+            hole_y,
+            hole_radius,
+        }
     }
 }
 
@@ -26,8 +38,22 @@ pub struct Circles {
 }
 
 impl Circles {
-    pub fn new(x: Vec<f32>, y: Vec<f32>, radius: Vec<f32>, hole_x: Vec<f32>, hole_y: Vec<f32>, hole_radius: Vec<f32>) -> Circles {
-        Circles { x, y, radius, hole_x, hole_y, hole_radius }
+    pub fn new(
+        x: Vec<f32>,
+        y: Vec<f32>,
+        radius: Vec<f32>,
+        hole_x: Vec<f32>,
+        hole_y: Vec<f32>,
+        hole_radius: Vec<f32>,
+    ) -> Circles {
+        Circles {
+            x,
+            y,
+            radius,
+            hole_x,
+            hole_y,
+            hole_radius,
+        }
     }
 }
 

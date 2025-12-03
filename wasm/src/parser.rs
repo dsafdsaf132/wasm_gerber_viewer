@@ -158,7 +158,13 @@ impl GerberParser {
 
         for primitive in primitives {
             match primitive {
-                Primitive::Triangle { vertices, hole_x, hole_y, hole_radius, .. } => {
+                Primitive::Triangle {
+                    vertices,
+                    hole_x,
+                    hole_y,
+                    hole_radius,
+                    ..
+                } => {
                     // Add triangle vertices to array (convert to mm units)
                     for vertex in vertices {
                         triangle_vertices.push(vertex[0] * TO_MM);
@@ -177,7 +183,15 @@ impl GerberParser {
                         triangle_hole_radius.push(*hole_radius * TO_MM);
                     }
                 }
-                Primitive::Circle { x, y, radius, hole_x, hole_y, hole_radius, .. } => {
+                Primitive::Circle {
+                    x,
+                    y,
+                    radius,
+                    hole_x,
+                    hole_y,
+                    hole_radius,
+                    ..
+                } => {
                     circles_x.push(*x * TO_MM);
                     circles_y.push(*y * TO_MM);
                     circles_radius.push(*radius * TO_MM);
@@ -281,8 +295,21 @@ impl GerberParser {
         }
 
         GerberData::new(
-            Triangles::new(triangle_vertices, triangle_indices, triangle_hole_x, triangle_hole_y, triangle_hole_radius),
-            Circles::new(circles_x, circles_y, circles_radius, circles_hole_x, circles_hole_y, circles_hole_radius),
+            Triangles::new(
+                triangle_vertices,
+                triangle_indices,
+                triangle_hole_x,
+                triangle_hole_y,
+                triangle_hole_radius,
+            ),
+            Circles::new(
+                circles_x,
+                circles_y,
+                circles_radius,
+                circles_hole_x,
+                circles_hole_y,
+                circles_hole_radius,
+            ),
             Arcs::new(
                 arcs_x,
                 arcs_y,
