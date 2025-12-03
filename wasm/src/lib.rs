@@ -1,12 +1,6 @@
-mod aperture;
-mod aperture_macro;
-mod buffer;
-mod camera;
 mod geometry;
 mod parser;
-mod parser_state;
 mod renderer;
-mod shader;
 mod shape;
 
 use crate::parser::parse_gerber;

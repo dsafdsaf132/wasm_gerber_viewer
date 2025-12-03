@@ -1,9 +1,17 @@
-use crate::aperture::{parse_aperture, Aperture};
-use crate::aperture_macro::{parse_macro, ApertureMacro};
+mod aperture;
+mod aperture_macro;
+mod state;
+
+// Export only what's needed externally
+pub use aperture::Aperture;
+pub use state::{FormatSpec, ParserState, Polarity};
+
+// Internal use only
+use aperture::parse_aperture;
+use aperture_macro::{parse_macro, ApertureMacro};
+use state::{parse_format_spec, parse_if, parse_lp, parse_mo, parse_sr};
+
 use crate::geometry::{parse_graphic_command, Primitive};
-use crate::parser_state::{
-    parse_format_spec, parse_if, parse_lp, parse_mo, parse_sr, ParserState, Polarity,
-};
 use crate::shape::{Arcs, Boundary, Circles, GerberData, Thermals, Triangles};
 use std::collections::HashMap;
 use std::mem::take;

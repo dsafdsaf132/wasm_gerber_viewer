@@ -1,9 +1,15 @@
-use crate::buffer::{BufferCache, Fbo};
-use crate::camera::Camera;
-use crate::shader::{
+mod buffer;
+mod camera;
+mod shader;
+
+// Internal use only
+use buffer::{BufferCache, Fbo};
+use camera::Camera;
+use shader::{
     ShaderProgram, ShaderPrograms, ARRAY_BUFFER, BLEND, COLOR_BUFFER_BIT, ELEMENT_ARRAY_BUFFER,
     FLOAT, FUNC_ADD, ONE, ONE_MINUS_SRC_ALPHA, STATIC_DRAW, TRIANGLES, UNSIGNED_INT, ZERO,
 };
+
 use crate::shape::{Boundary, GerberData};
 use js_sys::Float32Array;
 use wasm_bindgen::prelude::*;

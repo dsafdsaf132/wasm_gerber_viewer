@@ -1,4 +1,4 @@
-use crate::aperture_macro::ApertureMacro;
+use super::aperture_macro::ApertureMacro;
 use crate::geometry::Primitive;
 use std::collections::HashMap;
 

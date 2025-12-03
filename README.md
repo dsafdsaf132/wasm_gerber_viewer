@@ -50,15 +50,18 @@ wasm_gerber_viewer/
     ├── Cargo.toml                         # Rust dependencies
     └── src/                               # Rust source
         ├── lib.rs                         # WASM entry point (GerberProcessor)
-        ├── parser.rs                      # Main Gerber file parsing logic
         ├── geometry.rs                    # Geometric operations and primitives
-        ├── aperture.rs                    # Aperture definitions and parsing
-        ├── macro_.rs                      # Aperture macro definitions and parsing
-        ├── renderer.rs                    # WebGL2 renderer core logic
-        ├── shader.rs                      # Shader compilation and WebGL constants
-        ├── camera.rs                      # Camera and viewport transformations
-        ├── buffer.rs                      # GPU buffer and framebuffer structures
-        └── shape.rs                       # Geometry data structures
+        ├── shape.rs                       # Geometry data structures
+        ├── parser/                        # Gerber file parsing module
+        │   ├── mod.rs                     # Parser entry point and main logic
+        │   ├── state.rs                   # Parser state and configuration
+        │   ├── aperture.rs                # Aperture definitions and parsing
+        │   └── aperture_macro.rs          # Aperture macro definitions and parsing
+        └── renderer/                      # WebGL2 rendering module
+            ├── mod.rs                     # Renderer core logic
+            ├── shader.rs                  # Shader compilation and WebGL constants
+            ├── camera.rs                  # Camera and viewport transformations
+            └── buffer.rs                  # GPU buffer and framebuffer structures
 ```
 
 ## Browser Requirements

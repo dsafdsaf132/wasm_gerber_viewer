@@ -1,5 +1,4 @@
-use crate::aperture::Aperture;
-use crate::parser_state::{FormatSpec, ParserState};
+use crate::parser::{Aperture, FormatSpec, ParserState};
 use i_overlay::core::fill_rule::FillRule;
 use i_overlay::core::overlay_rule::OverlayRule;
 use i_overlay::float::single::SingleFloatOverlay;
