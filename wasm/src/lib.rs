@@ -1,8 +1,10 @@
 mod parser;
+mod parser_odb;
 mod renderer;
 mod shape;
 
 use crate::parser::parse_gerber;
+use crate::parser_odb::OdbParser;
 use crate::renderer::Renderer;
 use crate::shape::Boundary;
 use wasm_bindgen::prelude::*;
@@ -77,6 +79,43 @@ impl GerberProcessor {
 
             // For now, layer_id matches layer_index
             // In a more complex implementation, we could maintain a mapping
+            Ok(layer_index as u32)
+        } else {
+            Err(JsValue::from_str(
+                "Renderer not initialized. Call init() first.",
+            ))
+        }
+    }
+
+    /// Add a new ODB++ layer to the renderer
+    ///
+    /// # Arguments
+    /// * `features_content` - Features file content as string
+    /// * `symbols_content` - Symbols definition content as string
+    ///
+    /// # Returns
+    /// * Layer ID (u32) for tracking this layer
+    pub fn add_odb_layer(
+        &mut self,
+        features_content: String,
+        symbols_content: String,
+    ) -> Result<u32, JsValue> {
+        // Parse ODB++ content
+        let mut parser = OdbParser::new();
+        let gerber_data = parser.parse(&features_content, &symbols_content)?;
+
+        // Check if layer has geometry
+        if !gerber_data.has_geometry() {
+            return Err(JsValue::from_str(
+                "ODB++ file does not contain valid geometry data",
+            ));
+        }
+
+        // Add to renderer as a single layer
+        if let Some(renderer) = &mut self.renderer {
+            let layer_index = renderer.add_layer(vec![gerber_data])?;
+            self.next_layer_id += 1;
+
             Ok(layer_index as u32)
         } else {
             Err(JsValue::from_str(

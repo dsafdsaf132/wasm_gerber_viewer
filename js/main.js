@@ -202,8 +202,14 @@ export class GerberViewer {
     // Process all files in parallel (skip rendering during parallel processing)
     const promises = Array.from(files).map(async (file) => {
       try {
-        const content = await file.text();
-        await this.addLayer(file.name, content);
+        // Check if file is ODB++ format (tgz or zip)
+        if (file.name.endsWith('.tgz') || file.name.endsWith('.zip')) {
+          await this.handleOdbFile(file);
+        } else {
+          // Regular Gerber file
+          const content = await file.text();
+          await this.addLayer(file.name, content);
+        }
       } catch (error) {
         console.error(`Failed to load file ${file.name}:`, error);
       }
@@ -218,6 +224,90 @@ export class GerberViewer {
 
     // Clear file input
     this.fileInput.value = "";
+  }
+
+  async handleOdbFile(file) {
+    try {
+      // Unzip the ODB++ file using JSZip
+      const zipData = await JSZip.loadAsync(file);
+
+      // List all files to understand structure
+      const fileList = Object.keys(zipData.files);
+
+      // Find features and symbols files
+      // ODB++ structure: steps/<step_name>/layers/<layer_name>/features
+      const featuresFiles = fileList.filter(f => f.includes('/features'));
+
+      if (featuresFiles.length === 0) {
+        throw new Error('No features files found in ODB++ archive');
+      }
+
+      // Process each layer's features file
+      for (const featuresPath of featuresFiles) {
+        try {
+          // Extract layer name from path: steps/<step_name>/layers/<layer_name>/features
+          const pathParts = featuresPath.split('/');
+          const layerName = pathParts[pathParts.length - 2] || 'Unknown';
+
+          // Read features file
+          const featuresContent = await zipData.file(featuresPath).async('text');
+
+          // Find corresponding symbols file (in same directory)
+          const dir = featuresPath.substring(0, featuresPath.lastIndexOf('/'));
+          const symbolsPath = dir + '/symbols';
+
+          let symbolsContent = '';
+          if (zipData.file(symbolsPath)) {
+            symbolsContent = await zipData.file(symbolsPath).async('text');
+          } else {
+            // If no symbols file, create empty one
+            symbolsContent = '';
+          }
+
+          // Add ODB++ layer
+          await this.addOdbLayer(layerName, featuresContent, symbolsContent);
+        } catch (error) {
+          console.error(`Failed to process layer from ${featuresPath}:`, error);
+        }
+      }
+    } catch (error) {
+      throw new Error(`Failed to extract ODB++ file: ${error.message}`);
+    }
+  }
+
+  async addOdbLayer(name, featuresContent, symbolsContent) {
+    try {
+      // Call ODB++ parser in WASM
+      const layerId = this.wasmProcessor.add_odb_layer(featuresContent, symbolsContent);
+      if (layerId === undefined || layerId === null) {
+        throw new Error("Failed to get layer ID from ODB++ parser");
+      }
+
+      // Get layer boundary
+      const bounds = this.wasmProcessor.get_boundary();
+
+      const color =
+        this.colorPalette[this.nextColorIndex % this.colorPalette.length];
+      this.nextColorIndex++;
+
+      const layer = {
+        id: `layer-${layerId}`,
+        layerId: layerId,
+        name: `${name} (ODB++)`,
+        visible: true,
+        color: color,
+        bounds: {
+          minX: bounds.min_x,
+          maxX: bounds.max_x,
+          minY: bounds.min_y,
+          maxY: bounds.max_y,
+        },
+      };
+
+      this.layers.push(layer);
+    } catch (error) {
+      throw new Error(`Failed to add ODB++ layer: ${error.message}`);
+    }
   }
 
   async addLayer(name, content) {
