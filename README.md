@@ -50,10 +50,10 @@ wasm_gerber_viewer/
     ├── Cargo.toml                         # Rust dependencies
     └── src/                               # Rust source
         ├── lib.rs                         # WASM entry point (GerberProcessor)
-        ├── geometry.rs                    # Geometric operations and primitives
         ├── shape.rs                       # Geometry data structures
         ├── parser.rs                      # Parser entry point and main logic
         ├── parser/                        # Gerber file parsing submodules
+        │   ├── geometry.rs                # Geometric operations and primitives
         │   ├── state.rs                   # Parser state and configuration
         │   ├── aperture.rs                # Aperture definitions and parsing
         │   └── aperture_macro.rs          # Aperture macro definitions and parsing
