@@ -365,7 +365,13 @@ fn parse_command(
     if line.starts_with("%AM") {
         parse_macro(&line, macros);
     } else if line.starts_with("%ADD") {
-        parse_aperture(&line, apertures, macros, state.unit_multiplier);
+        parse_aperture(
+            &line,
+            apertures,
+            macros,
+            state.unit_multiplier,
+            state.layer_scale,
+        );
     } else if line.starts_with("%MO") {
         // Unit mode: %MOMM* or %MOIN*
         parse_mo(&line, state);

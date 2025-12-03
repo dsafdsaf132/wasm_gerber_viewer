@@ -342,7 +342,12 @@ pub fn parse_ls(line: &str, state: &mut ParserState) {
 
     let scale_str = &spec_str[2..]; // "0.8" part
 
-    if let Ok(scale) = scale_str.parse::<f32>() {
-        state.layer_scale = scale;
+    if let Ok(new_scale) = scale_str.parse::<f32>() {
+        if state.layer_scale != 0.0 && new_scale != state.layer_scale {
+            let ratio = new_scale / state.layer_scale;
+            state.x *= ratio;
+            state.y *= ratio;
+        }
+        state.layer_scale = new_scale;
     }
 }

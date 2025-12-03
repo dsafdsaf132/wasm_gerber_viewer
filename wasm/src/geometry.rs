@@ -55,6 +55,53 @@ pub fn rotate_point(point: &mut [f32; 2], angle: f32, center_x: f32, center_y: f
     point[1] = center_y + x * sin_a + y * cos_a;
 }
 
+/// Scale a primitive by a given factor
+pub fn scale_primitive(primitive: &mut Primitive, scale: f32) {
+    if scale == 1.0 {
+        return; // No scaling needed
+    }
+
+    match primitive {
+        Primitive::Circle {
+            radius,
+            hole_radius,
+            ..
+        } => {
+            *radius *= scale;
+            *hole_radius *= scale;
+        }
+        Primitive::Triangle {
+            vertices,
+            hole_radius,
+            ..
+        } => {
+            for vertex in vertices.iter_mut() {
+                vertex[0] *= scale;
+                vertex[1] *= scale;
+            }
+            *hole_radius *= scale;
+        }
+        Primitive::Arc {
+            radius,
+            thickness,
+            ..
+        } => {
+            *radius *= scale;
+            *thickness *= scale;
+        }
+        Primitive::Thermal {
+            outer_diameter,
+            inner_diameter,
+            gap_thickness,
+            ..
+        } => {
+            *outer_diameter *= scale;
+            *inner_diameter *= scale;
+            *gap_thickness *= scale;
+        }
+    }
+}
+
 /// Triangulate outline into triangles
 pub fn triangulate_outline(vertices: &[[f32; 2]], exposure: f32) -> Result<Vec<Primitive>, String> {
     if vertices.len() < 3 {
@@ -475,6 +522,7 @@ fn flash_aperture_no_sr(
     primitives: &mut Vec<Primitive>,
     x: f32,
     y: f32,
+    layer_scale: f32,
 ) {
     // Use pre-calculated has_negative field for performance
     if aperture.has_negative {
@@ -484,7 +532,9 @@ fn flash_aperture_no_sr(
             .primitives
             .iter()
             .map(|p| {
-                let offset_p = offset_primitive_by(p, x, y);
+                let mut scaled_primitive = p.clone();
+                scale_primitive(&mut scaled_primitive, layer_scale);
+                let offset_p = offset_primitive_by(&scaled_primitive, x, y);
                 let poly = primitive_to_polygon(&offset_p);
                 let exposure = match &offset_p {
                     Primitive::Circle { exposure, .. } => *exposure,
@@ -504,6 +554,7 @@ fn flash_aperture_no_sr(
         // Direct primitive cloning
         for primitive in &aperture.primitives {
             let mut new_primitive = primitive.clone();
+            scale_primitive(&mut new_primitive, layer_scale);
             match &mut new_primitive {
                 Primitive::Circle { x: px, y: py, hole_x: hx, hole_y: hy, .. } => {
                     *px += x;
@@ -547,7 +598,7 @@ pub fn flash_aperture(
             for sx in 0..state.sr_x {
                 let flash_x = x + sx as f32 * state.sr_i;
                 let flash_y = y + sy as f32 * state.sr_j;
-                flash_aperture_no_sr(aperture, primitives, flash_x, flash_y);
+                flash_aperture_no_sr(aperture, primitives, flash_x, flash_y, state.layer_scale);
             }
         }
     }
@@ -582,18 +633,36 @@ pub fn execute_interpolation(
                             let sr_end_y = end_y + offset_y;
 
                             // Flash aperture at start point (no SR since we're already in SR loop)
-                            flash_aperture_no_sr(aperture, primitives, sr_start_x, sr_start_y);
+                            flash_aperture_no_sr(
+                                aperture,
+                                primitives,
+                                sr_start_x,
+                                sr_start_y,
+                                state.layer_scale,
+                            );
 
                             // Convert vector line with width of aperture diameter to triangle
-                            let diameter = aperture.radius * 2.0;
-                            let line_triangles =
-                                line_to_triangles(sr_start_x, sr_start_y, sr_end_x, sr_end_y, diameter, 1.0);
+                            let diameter = aperture.radius * 2.0 * state.layer_scale;
+                            let line_triangles = line_to_triangles(
+                                sr_start_x,
+                                sr_start_y,
+                                sr_end_x,
+                                sr_end_y,
+                                diameter,
+                                1.0,
+                            );
                             for triangle in line_triangles {
                                 primitives.push(triangle);
                             }
 
                             // Flash aperture at end point (no SR since we're already in SR loop)
-                            flash_aperture_no_sr(aperture, primitives, sr_end_x, sr_end_y);
+                            flash_aperture_no_sr(
+                                aperture,
+                                primitives,
+                                sr_end_x,
+                                sr_end_y,
+                                state.layer_scale,
+                            );
                         }
                     }
                 }
@@ -611,7 +680,13 @@ pub fn execute_interpolation(
                             let sr_end_y = end_y + offset_y;
 
                             // Flash aperture at start point (no SR since we're already in SR loop)
-                            flash_aperture_no_sr(aperture, primitives, sr_start_x, sr_start_y);
+                            flash_aperture_no_sr(
+                                aperture,
+                                primitives,
+                                sr_start_x,
+                                sr_start_y,
+                                state.layer_scale,
+                            );
 
                             // Find the correct arc center
                             let (center_x, center_y) = if state.quadrant_mode == "single" {
@@ -629,8 +704,11 @@ pub fn execute_interpolation(
                                 for &candidate in &candidates {
                                     let cx = candidate.0;
                                     let cy = candidate.1;
-                                    let r1 = ((cx - sr_start_x).powi(2) + (cy - sr_start_y).powi(2)).sqrt();
-                                    let r2 = ((cx - sr_end_x).powi(2) + (cy - sr_end_y).powi(2)).sqrt();
+                                    let r1 =
+                                        ((cx - sr_start_x).powi(2) + (cy - sr_start_y).powi(2))
+                                            .sqrt();
+                                    let r2 = ((cx - sr_end_x).powi(2) + (cy - sr_end_y).powi(2))
+                                        .sqrt();
 
                                     // Check if radii are consistent
                                     if (r1 - r2).abs() < 0.001 {
@@ -657,11 +735,12 @@ pub fn execute_interpolation(
                                 (sr_start_x + i, sr_start_y + j)
                             };
 
-                            let radius =
-                                ((sr_start_x - center_x).powi(2) + (sr_start_y - center_y).powi(2)).sqrt();
+                            let radius = ((sr_start_x - center_x).powi(2)
+                                + (sr_start_y - center_y).powi(2))
+                            .sqrt();
                             let start_angle = (sr_start_y - center_y).atan2(sr_start_x - center_x);
                             let end_angle = (sr_end_y - center_y).atan2(sr_end_x - center_x);
-                            let thickness = aperture.radius * 2.0;
+                            let thickness = aperture.radius * 2.0 * state.layer_scale;
 
                             // Calculate sweep_angle considering direction
                             let mut sweep_angle = end_angle - start_angle;
@@ -697,7 +776,13 @@ pub fn execute_interpolation(
                             });
 
                             // Flash aperture at end point (no SR since we're already in SR loop)
-                            flash_aperture_no_sr(aperture, primitives, sr_end_x, sr_end_y);
+                            flash_aperture_no_sr(
+                                aperture,
+                                primitives,
+                                sr_end_x,
+                                sr_end_y,
+                                state.layer_scale,
+                            );
                         }
                     }
                 }
