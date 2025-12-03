@@ -268,12 +268,20 @@ pub fn parse_aperture(
                         params[1].trim().parse::<f32>(),
                     ) {
                         let diameter_mm = diameter * unit_multiplier * layer_scale;
-                        // If 4+ parameters: params[2]=rotation, params[3]=hole
-                        // If 3 parameters: params[2]=hole (rotation defaults to 0)
+
+                        // Parse rotation (degrees, defaults to 0)
+                        // 3 parameters: rotation (NOT hole!)
+                        // 4+ parameters: rotation AND hole
+                        let rotation_degrees = if params.len() > 2 {
+                            params[2].trim().parse::<f32>().unwrap_or(0.0)
+                        } else {
+                            0.0
+                        };
+                        let rotation_radians = rotation_degrees * std::f32::consts::PI / 180.0;
+
+                        // Parse hole (only if 4+ parameters)
                         let hole_diameter_mm = if params.len() > 3 {
                             params[3].trim().parse::<f32>().unwrap_or(0.0) * unit_multiplier * layer_scale
-                        } else if params.len() > 2 {
-                            params[2].trim().parse::<f32>().unwrap_or(0.0) * unit_multiplier * layer_scale
                         } else {
                             0.0
                         };
@@ -283,11 +291,11 @@ pub fn parse_aperture(
                         let num_vertices = num_vertices as u32;
                         let angle_step = 2.0 * std::f32::consts::PI / num_vertices as f32;
 
-                        // Fan triangulation
+                        // Fan triangulation with rotation
                         for i in 0..(num_vertices as usize) {
                             let next_i = (i + 1) % (num_vertices as usize);
-                            let angle_i = angle_step * i as f32;
-                            let angle_next = angle_step * next_i as f32;
+                            let angle_i = angle_step * i as f32 + rotation_radians;
+                            let angle_next = angle_step * next_i as f32 + rotation_radians;
 
                             let x1 = radius * angle_i.cos();
                             let y1 = radius * angle_i.sin();
