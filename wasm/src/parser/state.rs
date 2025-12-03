@@ -1,4 +1,4 @@
-use crate::geometry::Primitive;
+use super::geometry::Primitive;
 use std::mem::take;
 
 /// Polarity - Dark (positive) or Clear (negative)

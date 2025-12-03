@@ -1,4 +1,4 @@
-use crate::geometry::{line_to_triangles, rotate_point, triangulate_outline, Primitive};
+use super::geometry::{line_to_triangles, rotate_point, triangulate_outline, Primitive};
 use std::collections::HashMap;
 use std::mem::take;
 

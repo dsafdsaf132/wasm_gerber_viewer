@@ -1,5 +1,6 @@
 mod aperture;
 mod aperture_macro;
+pub mod geometry;
 mod state;
 
 // Export only what's needed externally
@@ -11,7 +12,7 @@ use aperture::parse_aperture;
 use aperture_macro::{parse_macro, ApertureMacro};
 use state::{parse_format_spec, parse_if, parse_lp, parse_ls, parse_mo, parse_sr};
 
-use crate::geometry::{parse_graphic_command, Primitive};
+use self::geometry::{parse_graphic_command, Primitive};
 use crate::shape::{Arcs, Boundary, Circles, GerberData, Thermals, Triangles};
 use std::collections::HashMap;
 use std::mem::take;

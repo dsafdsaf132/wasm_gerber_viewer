@@ -1,4 +1,3 @@
-mod geometry;
 mod parser;
 mod renderer;
 mod shape;

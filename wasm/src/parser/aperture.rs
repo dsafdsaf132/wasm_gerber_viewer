@@ -1,5 +1,5 @@
 use super::aperture_macro::ApertureMacro;
-use crate::geometry::Primitive;
+use super::geometry::Primitive;
 use std::collections::HashMap;
 
 /// Aperture definition (Circle, Rectangle, Obround, Polygon, or Macro reference)
