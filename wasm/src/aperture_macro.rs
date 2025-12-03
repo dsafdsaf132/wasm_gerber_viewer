@@ -1,5 +1,6 @@
 use crate::geometry::{line_to_triangles, rotate_point, triangulate_outline, Primitive};
 use std::collections::HashMap;
+use std::mem::take;
 
 /// Aperture macro definition - kept as statements until parameters arrive
 #[derive(Clone, Debug)]
@@ -43,7 +44,7 @@ impl ApertureMacro {
                     let var_name = stmt[..eq_idx].trim().to_string();
                     let expr = stmt[eq_idx + 1..].trim();
 
-                    if let Ok(value) = crate::parser::evaluate_expression(expr, &variables) {
+                    if let Ok(value) = evaluate_expression(expr, &variables) {
                         variables.insert(var_name, value);
                     }
                 }
@@ -115,6 +116,244 @@ pub fn check_macro_has_negative(statements: &[String]) -> bool {
     false
 }
 
+/// Evaluate expression - $5-$3, $1/2, 2X$3, etc.
+/// X is interpreted as multiply, $variables are evaluated in real-time
+pub fn evaluate_expression(expr: &str, variables: &HashMap<String, f32>) -> Result<f32, String> {
+    let expr = expr.trim();
+
+    // Replace X with * (X means multiply in Gerber format)
+    let expr = expr.replace('X', "*");
+
+    // Use simple expression calculator (pass variable map)
+    calculate_simple_expression(&expr, variables)
+}
+
+/// Simple arithmetic expression calculator: supports +, -, *, /
+/// Priority: * / > + -
+/// Tokens are numbers, $variables, or operators
+fn calculate_simple_expression(
+    expr: &str,
+    variables: &HashMap<String, f32>,
+) -> Result<f32, String> {
+    let expr = expr.trim();
+
+    if expr.is_empty() {
+        return Err("Empty expression".to_string());
+    }
+
+    // Tokenize: separate numbers, $variables, operators
+    let tokens = tokenize(expr)?;
+
+    if tokens.is_empty() {
+        return Err("No tokens".to_string());
+    }
+
+    // Process multiplication and division first (pass variable map)
+    let tokens = apply_multiplication_division(tokens, variables)?;
+
+    // Process addition and subtraction (pass variable map)
+    apply_addition_subtraction(tokens, variables)
+}
+
+/// Split expression into tokens - recognize $variables as tokens, handle negative numbers
+fn tokenize(expr: &str) -> Result<Vec<String>, String> {
+    let mut tokens = Vec::new();
+    let mut current_token = String::new();
+    let mut chars = expr.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch.is_ascii_whitespace() {
+            if !current_token.is_empty() {
+                tokens.push(take(&mut current_token));
+            }
+            continue;
+        }
+
+        // Handle negative numbers: - or + followed by number or $variable
+        // If no previous token or previous token is operator/bracket → interpret as sign
+        if (ch == '-' || ch == '+') && (tokens.is_empty() || is_operator_or_bracket(tokens.last()))
+        {
+            current_token.push(ch);
+
+            // After sign, $variable or number can follow
+            if let Some(&next_ch) = chars.peek() {
+                if next_ch == '$' {
+                    // Case like -$1
+                    tokens.push(take(&mut current_token)); // Save "-"
+
+                    // Process $variable
+                    current_token.push(chars.next().unwrap()); // $
+                    while let Some(&digit_ch) = chars.peek() {
+                        if digit_ch.is_ascii_digit() {
+                            current_token.push(chars.next().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+                    tokens.push(take(&mut current_token));
+                } else if next_ch.is_ascii_digit() || next_ch == '.' {
+                    // Read number after sign
+                    while let Some(&next_ch) = chars.peek() {
+                        if next_ch.is_ascii_digit() || next_ch == '.' {
+                            current_token.push(chars.next().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+                    tokens.push(take(&mut current_token));
+                } else {
+                    // If only sign without following value, treat as operator
+                    if !current_token.is_empty() {
+                        tokens.push(take(&mut current_token));
+                    }
+                    tokens.push(ch.to_string());
+                }
+            }
+        }
+        // Process $variable: $1, $2, $5, etc.
+        else if ch == '$' {
+            if !current_token.is_empty() {
+                tokens.push(take(&mut current_token));
+            }
+
+            current_token.push(ch);
+            while let Some(&next_ch) = chars.peek() {
+                if next_ch.is_ascii_digit() {
+                    current_token.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
+            }
+            tokens.push(take(&mut current_token));
+        }
+        // Regular number
+        else if ch.is_ascii_digit() || ch == '.' {
+            current_token.push(ch);
+        }
+        // Operator
+        else if "+-*/()".contains(ch) {
+            if !current_token.is_empty() {
+                tokens.push(take(&mut current_token));
+            }
+            tokens.push(ch.to_string());
+        } else {
+            return Err(format!("Invalid character: {}", ch));
+        }
+    }
+
+    if !current_token.is_empty() {
+        tokens.push(current_token);
+    }
+
+    Ok(tokens)
+}
+
+/// Check if token is operator or bracket
+fn is_operator_or_bracket(token: Option<&String>) -> bool {
+    match token {
+        Some(t) => matches!(t.as_str(), "+" | "-" | "*" | "/" | "("),
+        None => true, // True if before first token
+    }
+}
+
+/// Convert token to value (number or $variable)
+fn token_to_value(token: &str, variables: &HashMap<String, f32>) -> Result<f32, String> {
+    if token.starts_with('$') {
+        // Variable reference
+        variables
+            .get(token)
+            .copied()
+            .ok_or_else(|| format!("Undefined variable: {}", token))
+    } else {
+        // Number
+        token
+            .parse::<f32>()
+            .map_err(|_| format!("Invalid number: {}", token))
+    }
+}
+
+/// Process * and / operations
+fn apply_multiplication_division(
+    tokens: Vec<String>,
+    variables: &HashMap<String, f32>,
+) -> Result<Vec<String>, String> {
+    let mut result = Vec::new();
+    let mut i = 0;
+
+    while i < tokens.len() {
+        if i + 2 < tokens.len() && ("*" == tokens[i + 1] || "/" == tokens[i + 1]) {
+            let left = token_to_value(&tokens[i], variables)?;
+            let op = &tokens[i + 1];
+            let right = token_to_value(&tokens[i + 2], variables)?;
+
+            let value = if op == "*" {
+                left * right
+            } else {
+                if right == 0.0 {
+                    return Err("Division by zero".to_string());
+                }
+                left / right
+            };
+
+            result.push(value.to_string());
+            i += 3;
+        } else {
+            result.push(tokens[i].clone());
+            i += 1;
+        }
+    }
+
+    Ok(result)
+}
+
+/// Process + and - operations
+fn apply_addition_subtraction(
+    tokens: Vec<String>,
+    variables: &HashMap<String, f32>,
+) -> Result<f32, String> {
+    if tokens.is_empty() {
+        return Err("No tokens to process".to_string());
+    }
+
+    let mut i;
+    let mut result;
+
+    // Handle case where first token is operator (e.g., -$1, +$2)
+    if tokens[0] == "-" || tokens[0] == "+" {
+        let sign = if tokens[0] == "-" { -1.0 } else { 1.0 };
+        if tokens.len() < 2 {
+            return Err("Operator without operand".to_string());
+        }
+        result = sign * token_to_value(&tokens[1], variables)?;
+        i = 2;
+    } else {
+        result = token_to_value(&tokens[0], variables)?;
+        i = 1;
+    }
+
+    // Process remaining operations
+    while i < tokens.len() {
+        if i + 1 < tokens.len() {
+            let op = &tokens[i];
+            let right = token_to_value(&tokens[i + 1], variables)?;
+
+            if op == "+" {
+                result += right;
+            } else if op == "-" {
+                result -= right;
+            } else {
+                return Err(format!("Unexpected operator: {}", op));
+            }
+
+            i += 2;
+        } else {
+            break;
+        }
+    }
+
+    Ok(result)
+}
+
 /// Parse primitive statement: 1,1,$7,$5-$3,$6-$3,$4*
 pub fn parse_primitive_statement(
     stmt: &str,
@@ -141,10 +380,10 @@ pub fn parse_primitive_statement(
             if parts.len() < 5 {
                 return None;
             }
-            let exposure: f32 = crate::parser::evaluate_expression(parts[1], variables).ok()?;
-            let diameter: f32 = crate::parser::evaluate_expression(parts[2], variables).ok()?;
-            let center_x: f32 = crate::parser::evaluate_expression(parts[3], variables).ok()?;
-            let center_y: f32 = crate::parser::evaluate_expression(parts[4], variables).ok()?;
+            let exposure: f32 = evaluate_expression(parts[1], variables).ok()?;
+            let diameter: f32 = evaluate_expression(parts[2], variables).ok()?;
+            let center_x: f32 = evaluate_expression(parts[3], variables).ok()?;
+            let center_y: f32 = evaluate_expression(parts[4], variables).ok()?;
 
             primitives.push(Primitive::Circle {
                 x: center_x,
@@ -160,11 +399,11 @@ pub fn parse_primitive_statement(
             if parts.len() < 4 {
                 return None;
             }
-            let exposure: f32 = crate::parser::evaluate_expression(parts[1], variables).ok()?;
+            let exposure: f32 = evaluate_expression(parts[1], variables).ok()?;
             let num_vertices: u32 =
-                crate::parser::evaluate_expression(parts[2], variables).ok()? as u32;
+                evaluate_expression(parts[2], variables).ok()? as u32;
             let rotation: f32 = if parts.len() > 3 + (num_vertices as usize) * 2 {
-                crate::parser::evaluate_expression(
+                evaluate_expression(
                     parts[3 + (num_vertices as usize) * 2],
                     variables,
                 )
@@ -182,8 +421,8 @@ pub fn parse_primitive_statement(
                 if x_idx >= parts.len() || y_idx >= parts.len() {
                     return None;
                 }
-                let x = crate::parser::evaluate_expression(parts[x_idx], variables).ok()?;
-                let y = crate::parser::evaluate_expression(parts[y_idx], variables).ok()?;
+                let x = evaluate_expression(parts[x_idx], variables).ok()?;
+                let y = evaluate_expression(parts[y_idx], variables).ok()?;
                 vertices.push([x, y]);
             }
 
@@ -216,14 +455,14 @@ pub fn parse_primitive_statement(
             if parts.len() < 6 {
                 return None;
             }
-            let exposure: f32 = crate::parser::evaluate_expression(parts[1], variables).ok()?;
+            let exposure: f32 = evaluate_expression(parts[1], variables).ok()?;
             let num_vertices: u32 =
-                crate::parser::evaluate_expression(parts[2], variables).ok()? as u32;
-            let center_x: f32 = crate::parser::evaluate_expression(parts[3], variables).ok()?;
-            let center_y: f32 = crate::parser::evaluate_expression(parts[4], variables).ok()?;
-            let diameter: f32 = crate::parser::evaluate_expression(parts[5], variables).ok()?;
+                evaluate_expression(parts[2], variables).ok()? as u32;
+            let center_x: f32 = evaluate_expression(parts[3], variables).ok()?;
+            let center_y: f32 = evaluate_expression(parts[4], variables).ok()?;
+            let diameter: f32 = evaluate_expression(parts[5], variables).ok()?;
             let rotation: f32 = if parts.len() > 6 {
-                crate::parser::evaluate_expression(parts[6], variables).ok()?
+                evaluate_expression(parts[6], variables).ok()?
                     * (std::f32::consts::PI / 180.0)
             // degrees to radians
             } else {
@@ -270,16 +509,16 @@ pub fn parse_primitive_statement(
             if parts.len() < 6 {
                 return None;
             }
-            let center_x: f32 = crate::parser::evaluate_expression(parts[1], variables).ok()?;
-            let center_y: f32 = crate::parser::evaluate_expression(parts[2], variables).ok()?;
+            let center_x: f32 = evaluate_expression(parts[1], variables).ok()?;
+            let center_y: f32 = evaluate_expression(parts[2], variables).ok()?;
             let outer_diameter: f32 =
-                crate::parser::evaluate_expression(parts[3], variables).ok()?;
+                evaluate_expression(parts[3], variables).ok()?;
             let inner_diameter: f32 =
-                crate::parser::evaluate_expression(parts[4], variables).ok()?;
+                evaluate_expression(parts[4], variables).ok()?;
             let gap_thickness: f32 =
-                crate::parser::evaluate_expression(parts[5], variables).ok()?;
+                evaluate_expression(parts[5], variables).ok()?;
             let rotation: f32 = if parts.len() > 6 {
-                crate::parser::evaluate_expression(parts[6], variables).ok()?
+                evaluate_expression(parts[6], variables).ok()?
                     * (std::f32::consts::PI / 180.0)
             } else {
                 0.0
@@ -302,14 +541,14 @@ pub fn parse_primitive_statement(
             if parts.len() < 7 {
                 return None;
             }
-            let exposure: f32 = crate::parser::evaluate_expression(parts[1], variables).ok()?;
-            let width: f32 = crate::parser::evaluate_expression(parts[2], variables).ok()?;
-            let start_x: f32 = crate::parser::evaluate_expression(parts[3], variables).ok()?;
-            let start_y: f32 = crate::parser::evaluate_expression(parts[4], variables).ok()?;
-            let end_x: f32 = crate::parser::evaluate_expression(parts[5], variables).ok()?;
-            let end_y: f32 = crate::parser::evaluate_expression(parts[6], variables).ok()?;
+            let exposure: f32 = evaluate_expression(parts[1], variables).ok()?;
+            let width: f32 = evaluate_expression(parts[2], variables).ok()?;
+            let start_x: f32 = evaluate_expression(parts[3], variables).ok()?;
+            let start_y: f32 = evaluate_expression(parts[4], variables).ok()?;
+            let end_x: f32 = evaluate_expression(parts[5], variables).ok()?;
+            let end_y: f32 = evaluate_expression(parts[6], variables).ok()?;
             let rotation: f32 = if parts.len() > 7 {
-                crate::parser::evaluate_expression(parts[7], variables).ok()?
+                evaluate_expression(parts[7], variables).ok()?
                     * (std::f32::consts::PI / 180.0)
             // degrees to radians
             } else {
@@ -337,13 +576,13 @@ pub fn parse_primitive_statement(
             if parts.len() < 6 {
                 return None;
             }
-            let exposure: f32 = crate::parser::evaluate_expression(parts[1], variables).ok()?;
-            let width: f32 = crate::parser::evaluate_expression(parts[2], variables).ok()?;
-            let height: f32 = crate::parser::evaluate_expression(parts[3], variables).ok()?;
-            let center_x: f32 = crate::parser::evaluate_expression(parts[4], variables).ok()?;
-            let center_y: f32 = crate::parser::evaluate_expression(parts[5], variables).ok()?;
+            let exposure: f32 = evaluate_expression(parts[1], variables).ok()?;
+            let width: f32 = evaluate_expression(parts[2], variables).ok()?;
+            let height: f32 = evaluate_expression(parts[3], variables).ok()?;
+            let center_x: f32 = evaluate_expression(parts[4], variables).ok()?;
+            let center_y: f32 = evaluate_expression(parts[5], variables).ok()?;
             let rotation: f32 = if parts.len() > 6 {
-                crate::parser::evaluate_expression(parts[6], variables).ok()?
+                evaluate_expression(parts[6], variables).ok()?
             } else {
                 0.0
             };

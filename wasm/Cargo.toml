@@ -3,6 +3,9 @@ name = "wasm_gerber_processor"
 version = "0.1.0"
 edition = "2021"
 
+[lints.clippy]
+too_many_arguments = "allow"
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 

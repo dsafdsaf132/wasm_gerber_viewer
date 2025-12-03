@@ -202,81 +202,78 @@ impl Renderer {
     /// Clear all layers and clean up WebGL resources
     pub fn clear_all(&mut self) {
         // Delete all cached resources for each layer
-        for layer_opt in self.layers.drain(..) {
-            if let Some(layer) = layer_opt {
-                // Delete framebuffer and texture
-                self.gl.delete_framebuffer(Some(&layer.fbo.framebuffer));
-                self.gl.delete_texture(Some(&layer.fbo.texture));
+        for layer in self.layers.drain(..).flatten() {
+            // Delete framebuffer and texture
+            self.gl.delete_framebuffer(Some(&layer.fbo.framebuffer));
+            self.gl.delete_texture(Some(&layer.fbo.texture));
 
-                // Delete all cached buffers and VAOs
-                for cache in layer.buffer_caches {
-                    // Delete triangle cache
-                    if let Some(vao) = cache.triangle_vao {
-                        self.gl.delete_vertex_array(Some(&vao));
-                    }
-                    if let Some(buf) = cache.triangle_vertex_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
-                    if let Some(buf) = cache.triangle_index_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
+            // Delete all cached buffers and VAOs
+            for cache in layer.buffer_caches {
+                // Delete triangle cache
+                if let Some(vao) = cache.triangle_vao {
+                    self.gl.delete_vertex_array(Some(&vao));
+                }
+                if let Some(buf) = cache.triangle_vertex_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.triangle_index_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
 
-                    // Delete circle cache
-                    if let Some(vao) = cache.circle_vao {
-                        self.gl.delete_vertex_array(Some(&vao));
-                    }
-                    if let Some(buf) = cache.circle_center_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
-                    if let Some(buf) = cache.circle_radius_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
+                // Delete circle cache
+                if let Some(vao) = cache.circle_vao {
+                    self.gl.delete_vertex_array(Some(&vao));
+                }
+                if let Some(buf) = cache.circle_center_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.circle_radius_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
 
-                    // Delete arc cache
-                    if let Some(vao) = cache.arc_vao {
-                        self.gl.delete_vertex_array(Some(&vao));
-                    }
-                    if let Some(buf) = cache.arc_center_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
-                    if let Some(buf) = cache.arc_radius_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
-                    if let Some(buf) = cache.arc_start_angle_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
-                    if let Some(buf) = cache.arc_sweep_angle_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
-                    if let Some(buf) = cache.arc_thickness_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
+                // Delete arc cache
+                if let Some(vao) = cache.arc_vao {
+                    self.gl.delete_vertex_array(Some(&vao));
+                }
+                if let Some(buf) = cache.arc_center_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.arc_radius_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.arc_start_angle_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.arc_sweep_angle_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.arc_thickness_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
 
-                    // Delete thermal cache
-                    if let Some(vao) = cache.thermal_vao {
-                        self.gl.delete_vertex_array(Some(&vao));
-                    }
-                    if let Some(buf) = cache.thermal_center_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
-                    if let Some(buf) = cache.thermal_outer_diameter_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
-                    if let Some(buf) = cache.thermal_inner_diameter_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
-                    if let Some(buf) = cache.thermal_gap_thickness_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
-                    if let Some(buf) = cache.thermal_rotation_buffer {
-                        self.gl.delete_buffer(Some(&buf));
-                    }
+                // Delete thermal cache
+                if let Some(vao) = cache.thermal_vao {
+                    self.gl.delete_vertex_array(Some(&vao));
+                }
+                if let Some(buf) = cache.thermal_center_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.thermal_outer_diameter_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.thermal_inner_diameter_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.thermal_gap_thickness_buffer {
+                    self.gl.delete_buffer(Some(&buf));
+                }
+                if let Some(buf) = cache.thermal_rotation_buffer {
+                    self.gl.delete_buffer(Some(&buf));
                 }
             }
         }
         self.layer_count = 0;
     }
-
 
     fn create_fbo(gl: &WebGl2RenderingContext, width: u32, height: u32) -> Result<Fbo, JsValue> {
         let texture = gl.create_texture().ok_or("Failed to create texture")?;
@@ -602,8 +599,15 @@ impl Renderer {
 
             // Create instance buffers
             let centers = Self::interleave_xy(&circles.x, &circles.y);
-            let center_buffer = Self::create_instance_buffer_2d(&self.gl, &centers, program, "center_instance", 1)?;
-            let radius_buffer = Self::create_instance_buffer(&self.gl, &circles.radius, program, "radius_instance", 1)?;
+            let center_buffer =
+                Self::create_instance_buffer_2d(&self.gl, &centers, program, "center_instance", 1)?;
+            let radius_buffer = Self::create_instance_buffer(
+                &self.gl,
+                &circles.radius,
+                program,
+                "radius_instance",
+                1,
+            )?;
 
             // Unbind VAO
             self.gl.bind_vertex_array(None);
@@ -686,11 +690,36 @@ impl Renderer {
 
             // Create instance buffers
             let centers = Self::interleave_xy(&arcs.x, &arcs.y);
-            let center_buffer = Self::create_instance_buffer_2d(&self.gl, &centers, program, "center_instance", 1)?;
-            let radius_buffer = Self::create_instance_buffer(&self.gl, &arcs.radius, program, "radius_instance", 1)?;
-            let start_angle_buffer = Self::create_instance_buffer(&self.gl, &arcs.start_angle, program, "startAngle_instance", 1)?;
-            let sweep_angle_buffer = Self::create_instance_buffer(&self.gl, &arcs.sweep_angle, program, "sweepAngle_instance", 1)?;
-            let thickness_buffer = Self::create_instance_buffer(&self.gl, &arcs.thickness, program, "thickness_instance", 1)?;
+            let center_buffer =
+                Self::create_instance_buffer_2d(&self.gl, &centers, program, "center_instance", 1)?;
+            let radius_buffer = Self::create_instance_buffer(
+                &self.gl,
+                &arcs.radius,
+                program,
+                "radius_instance",
+                1,
+            )?;
+            let start_angle_buffer = Self::create_instance_buffer(
+                &self.gl,
+                &arcs.start_angle,
+                program,
+                "startAngle_instance",
+                1,
+            )?;
+            let sweep_angle_buffer = Self::create_instance_buffer(
+                &self.gl,
+                &arcs.sweep_angle,
+                program,
+                "sweepAngle_instance",
+                1,
+            )?;
+            let thickness_buffer = Self::create_instance_buffer(
+                &self.gl,
+                &arcs.thickness,
+                program,
+                "thickness_instance",
+                1,
+            )?;
 
             // Unbind VAO
             self.gl.bind_vertex_array(None);
@@ -776,11 +805,36 @@ impl Renderer {
 
             // Create instance buffers
             let centers = Self::interleave_xy(&thermals.x, &thermals.y);
-            let center_buffer = Self::create_instance_buffer_2d(&self.gl, &centers, program, "center_instance", 1)?;
-            let outer_diameter_buffer = Self::create_instance_buffer(&self.gl, &thermals.outer_diameter, program, "outer_diameter_instance", 1)?;
-            let inner_diameter_buffer = Self::create_instance_buffer(&self.gl, &thermals.inner_diameter, program, "inner_diameter_instance", 1)?;
-            let gap_thickness_buffer = Self::create_instance_buffer(&self.gl, &thermals.gap_thickness, program, "gap_thickness_instance", 1)?;
-            let rotation_buffer = Self::create_instance_buffer(&self.gl, &thermals.rotation, program, "rotation_instance", 1)?;
+            let center_buffer =
+                Self::create_instance_buffer_2d(&self.gl, &centers, program, "center_instance", 1)?;
+            let outer_diameter_buffer = Self::create_instance_buffer(
+                &self.gl,
+                &thermals.outer_diameter,
+                program,
+                "outer_diameter_instance",
+                1,
+            )?;
+            let inner_diameter_buffer = Self::create_instance_buffer(
+                &self.gl,
+                &thermals.inner_diameter,
+                program,
+                "inner_diameter_instance",
+                1,
+            )?;
+            let gap_thickness_buffer = Self::create_instance_buffer(
+                &self.gl,
+                &thermals.gap_thickness,
+                program,
+                "gap_thickness_instance",
+                1,
+            )?;
+            let rotation_buffer = Self::create_instance_buffer(
+                &self.gl,
+                &thermals.rotation,
+                program,
+                "rotation_instance",
+                1,
+            )?;
 
             // Unbind VAO
             self.gl.bind_vertex_array(None);

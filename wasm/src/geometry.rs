@@ -1,7 +1,10 @@
+use crate::aperture::Aperture;
+use crate::parser_state::{FormatSpec, ParserState};
 use i_overlay::core::fill_rule::FillRule;
 use i_overlay::core::overlay_rule::OverlayRule;
 use i_overlay::float::single::SingleFloatOverlay;
 use i_triangle::float::triangulatable::Triangulatable;
+use std::collections::HashMap;
 
 /// Basic primitive shape - created directly by parser
 #[derive(Clone, Debug)]
@@ -380,4 +383,487 @@ pub fn offset_primitive_by(primitive: &Primitive, dx: f32, dy: f32) -> Primitive
             exposure: *exposure,
         },
     }
+}
+
+/// Extracts the numeric value after a specific character in a string (e.g., "X1000" → "1000")
+pub fn extract_value(line: &str, key: char) -> Option<String> {
+    let key_str = key.to_string();
+    if let Some(pos) = line.find(&key_str) {
+        let rest = &line[pos + 1..];
+        let mut value = String::new();
+        let mut has_minus = false;
+
+        for ch in rest.chars() {
+            if ch == '-' || ch == '+' {
+                has_minus = ch == '-';
+            } else if ch.is_ascii_digit() {
+                if has_minus && value.is_empty() {
+                    value.push('-');
+                }
+                value.push(ch);
+            } else {
+                break;
+            }
+        }
+
+        if value.is_empty() {
+            None
+        } else {
+            Some(value)
+        }
+    } else {
+        None
+    }
+}
+
+/// Coordinate value conversion - decimal point processing according to format spec
+pub fn convert_coordinate(
+    coord_str: &str,
+    axis: char,
+    format_spec: &FormatSpec,
+    unit_multiplier: f32,
+) -> f32 {
+    if let Ok(val) = coord_str.parse::<i64>() {
+        let divisor = match axis {
+            'x' => format_spec.x_divisor,
+            'y' => format_spec.y_divisor,
+            _ => 10000.0,
+        };
+
+        // Divide by decimal point position (no padding) and then convert units (1.0 for mm, 25.4 for inch)
+        (val as f64 / divisor) as f32 * unit_multiplier
+    } else {
+        0.0
+    }
+}
+
+/// Flash aperture at given position - add all primitives of the aperture to the position
+pub fn flash_aperture(
+    state: &ParserState,
+    apertures: &HashMap<String, Aperture>,
+    primitives: &mut Vec<Primitive>,
+    x: f32,
+    y: f32,
+) {
+    if let Some(aperture) = apertures.get(&state.current_aperture) {
+        // Step and Repeat iteration
+        for sy in 0..state.sr_y {
+            for sx in 0..state.sr_x {
+                let flash_x = x + sx as f32 * state.sr_i;
+                let flash_y = y + sy as f32 * state.sr_j;
+
+                // Use pre-calculated has_negative field for performance
+                if aperture.has_negative {
+                    // Boolean operations with hole preservation
+                    // Convert offset primitives to shapes
+                    let shapes_with_exposure: Vec<(Vec<Vec<[f32; 2]>>, f32)> = aperture
+                        .primitives
+                        .iter()
+                        .map(|p| {
+                            let offset_p = offset_primitive_by(p, flash_x, flash_y);
+                            let poly = primitive_to_polygon(&offset_p);
+                            let exposure = match &offset_p {
+                                Primitive::Circle { exposure, .. } => *exposure,
+                                Primitive::Triangle { exposure, .. } => *exposure,
+                                Primitive::Arc { exposure, .. } => *exposure,
+                                Primitive::Thermal { exposure, .. } => *exposure,
+                            };
+                            // Wrap polygon in shape format (single contour)
+                            (vec![poly], exposure)
+                        })
+                        .collect();
+
+                    // Apply boolean operations with hole preservation
+                    let result_primitives = apply_boolean_operations(&shapes_with_exposure);
+                    primitives.extend(result_primitives);
+                } else {
+                    // Direct primitive cloning
+                    for primitive in &aperture.primitives {
+                        let mut new_primitive = primitive.clone();
+                        match &mut new_primitive {
+                            Primitive::Circle { x: px, y: py, .. } => {
+                                // Add Circle with offset to position
+                                *px += flash_x;
+                                *py += flash_y;
+                            }
+                            Primitive::Triangle { vertices, .. } => {
+                                // Add all vertices of Triangle with offset to position
+                                for vertex in vertices.iter_mut() {
+                                    vertex[0] += flash_x;
+                                    vertex[1] += flash_y;
+                                }
+                            }
+                            Primitive::Arc { x: ax, y: ay, .. } => {
+                                // Add Arc with offset to position
+                                *ax += flash_x;
+                                *ay += flash_y;
+                            }
+                            Primitive::Thermal { x: tx, y: ty, .. } => {
+                                // Add Thermal with offset to position
+                                *tx += flash_x;
+                                *ty += flash_y;
+                            }
+                        }
+                        primitives.push(new_primitive);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Execute interpolation (draw line or arc)
+pub fn execute_interpolation(
+    state: &mut ParserState,
+    apertures: &HashMap<String, Aperture>,
+    primitives: &mut Vec<Primitive>,
+    end_x: f32,
+    end_y: f32,
+    i: f32,
+    j: f32,
+) {
+    let start_x = state.x;
+    let start_y = state.y;
+
+    // Get current aperture
+    if let Some(_aperture) = apertures.get(&state.current_aperture) {
+        match state.interpolation_mode.as_str() {
+            "linear" | "linear_x10" | "linear_x01" | "linear_x001" => {
+                // Draw line
+                // Flash aperture at start point
+                flash_aperture(state, apertures, primitives, start_x, start_y);
+
+                // Convert vector line with width of aperture diameter to triangle
+                if let Some(aperture) = apertures.get(&state.current_aperture) {
+                    let diameter = aperture.radius * 2.0;
+                    let line_triangles =
+                        line_to_triangles(start_x, start_y, end_x, end_y, diameter, 1.0);
+                    for triangle in line_triangles {
+                        primitives.push(triangle);
+                    }
+                }
+
+                // Flash aperture at end point
+                flash_aperture(state, apertures, primitives, end_x, end_y);
+            }
+            "clockwise" | "counterclockwise" => {
+                // Draw arc
+                // Flash aperture at start point
+                flash_aperture(state, apertures, primitives, start_x, start_y);
+
+                // Create Arc primitive
+                if let Some(aperture) = apertures.get(&state.current_aperture) {
+                    // Find the correct arc center
+                    let (center_x, center_y) = if state.quadrant_mode == "single" {
+                        // Single-quadrant mode: find correct center from 4 candidates (±I, ±J)
+                        let candidates = [
+                            (start_x + i, start_y + j),
+                            (start_x - i, start_y + j),
+                            (start_x + i, start_y - j),
+                            (start_x - i, start_y - j),
+                        ];
+
+                        let mut selected = candidates[0];
+                        let is_clockwise = state.interpolation_mode == "clockwise";
+
+                        for &candidate in &candidates {
+                            let cx = candidate.0;
+                            let cy = candidate.1;
+                            let r1 = ((cx - start_x).powi(2) + (cy - start_y).powi(2)).sqrt();
+                            let r2 = ((cx - end_x).powi(2) + (cy - end_y).powi(2)).sqrt();
+
+                            // Check if radii are consistent
+                            if (r1 - r2).abs() < 0.001 {
+                                let sa = (start_y - cy).atan2(start_x - cx);
+                                let ea = (end_y - cy).atan2(end_x - cx);
+                                let mut sweep = ea - sa;
+
+                                if is_clockwise && sweep > 0.0 {
+                                    sweep -= 2.0 * std::f32::consts::PI;
+                                } else if !is_clockwise && sweep < 0.0 {
+                                    sweep += 2.0 * std::f32::consts::PI;
+                                }
+
+                                // Check if sweep angle <= 90 degrees
+                                if sweep.abs() <= std::f32::consts::PI / 2.0 + 0.001 {
+                                    selected = candidate;
+                                    break;
+                                }
+                            }
+                        }
+                        selected
+                    } else {
+                        // Multi-quadrant mode: center is directly specified
+                        (start_x + i, start_y + j)
+                    };
+
+                    let radius =
+                        ((start_x - center_x).powi(2) + (start_y - center_y).powi(2)).sqrt();
+                    let start_angle = (start_y - center_y).atan2(start_x - center_x);
+                    let end_angle = (end_y - center_y).atan2(end_x - center_x);
+                    let thickness = aperture.radius * 2.0;
+
+                    // Calculate sweep_angle considering direction
+                    let mut sweep_angle = end_angle - start_angle;
+                    let is_clockwise = state.interpolation_mode == "clockwise";
+
+                    // Normalize sweep angle based on direction
+                    if is_clockwise && sweep_angle > 0.0 {
+                        sweep_angle -= 2.0 * std::f32::consts::PI;
+                    } else if !is_clockwise && sweep_angle < 0.0 {
+                        sweep_angle += 2.0 * std::f32::consts::PI;
+                    }
+
+                    // Clamp single-quadrant sweep angle to ±90 degrees
+                    if state.quadrant_mode == "single"
+                        && sweep_angle.abs() > std::f32::consts::PI / 2.0 + 0.001
+                    {
+                        if is_clockwise {
+                            sweep_angle = -std::f32::consts::PI / 2.0;
+                        } else {
+                            sweep_angle = std::f32::consts::PI / 2.0;
+                        }
+                    }
+
+                    // Add Arc primitive
+                    primitives.push(Primitive::Arc {
+                        x: center_x,
+                        y: center_y,
+                        radius,
+                        start_angle,
+                        end_angle: start_angle + sweep_angle,
+                        thickness,
+                        exposure: 1.0,
+                    });
+                }
+
+                // Flash aperture at end point
+                flash_aperture(state, apertures, primitives, end_x, end_y);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Parse graphic commands - process G/D/XY codes
+/// Example: G01X1000Y2000D01* (draw line), X1000Y2000D03* (flash), etc.
+pub fn parse_graphic_command(
+    line: &str,
+    state: &mut ParserState,
+    apertures: &HashMap<String, Aperture>,
+    primitives: &mut Vec<Primitive>,
+    region_contours: &mut Vec<Vec<[f32; 2]>>,
+) {
+    let clean_line = line.trim_end_matches('*');
+
+    // Process G-code
+    if let Some(g_match) = extract_value(clean_line, 'G') {
+        if let Ok(g_code) = g_match.parse::<u32>() {
+            match g_code {
+                1 => {
+                    // G01: Linear interpolation (1x scale)
+                    state.interpolation_mode = "linear".to_string();
+                    state.scale = 1.0;
+                }
+                2 => {
+                    // G02: Clockwise arc interpolation
+                    state.interpolation_mode = "clockwise".to_string();
+                }
+                3 => {
+                    // G03: Counterclockwise arc interpolation
+                    state.interpolation_mode = "counterclockwise".to_string();
+                }
+                10 => {
+                    // G10: Linear interpolation (10x scale)
+                    state.interpolation_mode = "linear_x10".to_string();
+                    state.scale = 10.0;
+                }
+                11 => {
+                    // G11: Linear interpolation (0.1x scale)
+                    state.interpolation_mode = "linear_x01".to_string();
+                    state.scale = 0.1;
+                }
+                12 => {
+                    // G12: Linear interpolation (0.01x scale)
+                    state.interpolation_mode = "linear_x001".to_string();
+                    state.scale = 0.01;
+                }
+                36 => {
+                    // G36: Start region fill mode
+                    state.region_mode = true;
+                    region_contours.clear();
+                    region_contours.push(Vec::new()); // Start new contour
+                }
+                37 => {
+                    // G37: End region fill mode
+                    state.region_mode = false;
+
+                    // Triangulate region and add to primitives
+                    // Regions are always positive (add material)
+                    for contour in region_contours.iter() {
+                        if contour.len() >= 3 {
+                            match triangulate_outline(contour, 1.0) {
+                                Ok(triangles) => {
+                                    primitives.extend(triangles);
+                                }
+                                Err(_e) => {
+                                    // Triangulation failed, skip this contour
+                                }
+                            }
+                        }
+                    }
+
+                    region_contours.clear();
+                }
+                70 => {
+                    // G70: Unit mode - Inches
+                    state.unit_multiplier = 25.4;
+                }
+                71 => {
+                    // G71: Unit mode - Millimeters
+                    state.unit_multiplier = 1.0;
+                }
+                74 => {
+                    // G74: Single quadrant mode
+                    state.quadrant_mode = "single".to_string();
+                }
+                75 => {
+                    // G75: Multi-quadrant mode
+                    state.quadrant_mode = "multi".to_string();
+                }
+                90 => {
+                    // G90: Absolute coordinate mode
+                    state.coordinate_mode = "absolute".to_string();
+                }
+                91 => {
+                    // G91: Incremental coordinate mode
+                    state.coordinate_mode = "incremental".to_string();
+                }
+                _ => {
+                    // Unsupported G-code
+                }
+            }
+        }
+    }
+
+    // Extract coordinates and D-code using regex
+    let x_match = extract_value(clean_line, 'X');
+    let y_match = extract_value(clean_line, 'Y');
+    let i_match = extract_value(clean_line, 'I');
+    let j_match = extract_value(clean_line, 'J');
+    let d_match = extract_value(clean_line, 'D');
+
+    let mut x = state.x;
+    let mut y = state.y;
+    let mut i = 0.0;
+    let mut j = 0.0;
+
+    // Process X coordinate
+    if let Some(x_val) = x_match.as_ref() {
+        let new_x =
+            convert_coordinate(x_val, 'x', &state.format_spec, state.unit_multiplier) * state.scale;
+        x = if state.coordinate_mode == "absolute" {
+            new_x
+        } else {
+            state.x + new_x
+        };
+    }
+
+    // Process Y coordinate
+    if let Some(y_val) = y_match.as_ref() {
+        let new_y =
+            convert_coordinate(y_val, 'y', &state.format_spec, state.unit_multiplier) * state.scale;
+        y = if state.coordinate_mode == "absolute" {
+            new_y
+        } else {
+            state.y + new_y
+        };
+    }
+
+    // Process I coordinate (arc center X offset)
+    if let Some(i_val) = i_match.as_ref() {
+        let raw_i =
+            convert_coordinate(i_val, 'x', &state.format_spec, state.unit_multiplier) * state.scale;
+        i = if state.quadrant_mode == "single" {
+            raw_i.abs()
+        } else {
+            raw_i
+        };
+    }
+
+    // Process J coordinate (arc center Y offset)
+    if let Some(j_val) = j_match.as_ref() {
+        let raw_j =
+            convert_coordinate(j_val, 'y', &state.format_spec, state.unit_multiplier) * state.scale;
+        j = if state.quadrant_mode == "single" {
+            raw_j.abs()
+        } else {
+            raw_j
+        };
+    }
+
+    // Process D-code
+    if let Some(d_val) = d_match {
+        if let Ok(d_code) = d_val.parse::<u32>() {
+            match d_code {
+                1 => {
+                    // D01: Pen down (draw)
+                    state.pen_state = "down".to_string();
+
+                    // If in region mode, add coordinates to contour
+                    if state.region_mode {
+                        if !region_contours.is_empty() {
+                            let last_contour = region_contours.last_mut().unwrap();
+                            last_contour.push([x, y]);
+                        }
+                    } else {
+                        execute_interpolation(state, apertures, primitives, x, y, i, j);
+                    }
+                }
+                2 => {
+                    // D02: Pen up (move)
+                    state.pen_state = "up".to_string();
+
+                    // Movement is also handled in Region mode
+                    if state.region_mode && !region_contours.is_empty() {
+                        // D02 starts a new contour (which can be a hole)
+                        let last_contour = region_contours.last_mut().unwrap();
+                        if !last_contour.is_empty() {
+                            // If the current contour is not empty, add a new one
+                            region_contours.push(Vec::new());
+                        }
+                    }
+                }
+                3 => {
+                    // D03: Flash aperture at current position
+                    if !state.region_mode {
+                        flash_aperture(state, apertures, primitives, x, y);
+                    }
+                }
+                10..=9999 => {
+                    // D10+: Aperture selection
+                    state.current_aperture = d_val;
+                }
+                _ => {}
+            }
+        }
+    } else if (x_match.is_some() || y_match.is_some()) && state.pen_state == "down" {
+        // If there is only X/Y without D-code and the pen is down, execute interpolation
+        if state.region_mode {
+            if !region_contours.is_empty() {
+                let last_contour = region_contours.last_mut().unwrap();
+                last_contour.push([x, y]);
+            }
+        } else {
+            execute_interpolation(state, apertures, primitives, x, y, i, j);
+        }
+    } else {
+        // No drawing operation
+    }
+
+    // Update state
+    state.x = x;
+    state.y = y;
+    state.i = i;
+    state.j = j;
 }
