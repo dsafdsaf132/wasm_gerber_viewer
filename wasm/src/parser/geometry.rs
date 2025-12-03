@@ -102,6 +102,120 @@ pub fn scale_primitive(primitive: &mut Primitive, scale: f32) {
     }
 }
 
+/// Apply mirror transformation to a primitive
+pub fn mirror_primitive(primitive: &mut Primitive, mirror_x: bool, mirror_y: bool) {
+    if !mirror_x && !mirror_y {
+        return; // No mirroring needed
+    }
+
+    match primitive {
+        Primitive::Circle { x, y, hole_x, hole_y, .. } => {
+            if mirror_x {
+                *x = -*x;
+                *hole_x = -*hole_x;
+            }
+            if mirror_y {
+                *y = -*y;
+                *hole_y = -*hole_y;
+            }
+        }
+        Primitive::Triangle { vertices, hole_x, hole_y, .. } => {
+            for vertex in vertices.iter_mut() {
+                if mirror_x {
+                    vertex[0] = -vertex[0];
+                }
+                if mirror_y {
+                    vertex[1] = -vertex[1];
+                }
+            }
+            if mirror_x {
+                *hole_x = -*hole_x;
+            }
+            if mirror_y {
+                *hole_y = -*hole_y;
+            }
+        }
+        Primitive::Arc { x, y, .. } => {
+            if mirror_x {
+                *x = -*x;
+            }
+            if mirror_y {
+                *y = -*y;
+            }
+        }
+        Primitive::Thermal { x, y, .. } => {
+            if mirror_x {
+                *x = -*x;
+            }
+            if mirror_y {
+                *y = -*y;
+            }
+        }
+    }
+}
+
+/// Apply rotation transformation to a primitive
+pub fn rotate_primitive(primitive: &mut Primitive, rotation_angle: f32) {
+    if rotation_angle == 0.0 {
+        return; // No rotation needed
+    }
+
+    let cos_a = rotation_angle.cos();
+    let sin_a = rotation_angle.sin();
+
+    match primitive {
+        Primitive::Circle { x, y, hole_x, hole_y, .. } => {
+            // Rotate center
+            let rotated_x = *x * cos_a - *y * sin_a;
+            let rotated_y = *x * sin_a + *y * cos_a;
+            *x = rotated_x;
+            *y = rotated_y;
+
+            // Rotate hole position
+            let rotated_hx = *hole_x * cos_a - *hole_y * sin_a;
+            let rotated_hy = *hole_x * sin_a + *hole_y * cos_a;
+            *hole_x = rotated_hx;
+            *hole_y = rotated_hy;
+        }
+        Primitive::Triangle { vertices, hole_x, hole_y, .. } => {
+            // Rotate vertices
+            for vertex in vertices.iter_mut() {
+                let rotated_x = vertex[0] * cos_a - vertex[1] * sin_a;
+                let rotated_y = vertex[0] * sin_a + vertex[1] * cos_a;
+                vertex[0] = rotated_x;
+                vertex[1] = rotated_y;
+            }
+
+            // Rotate hole position
+            let rotated_hx = *hole_x * cos_a - *hole_y * sin_a;
+            let rotated_hy = *hole_x * sin_a + *hole_y * cos_a;
+            *hole_x = rotated_hx;
+            *hole_y = rotated_hy;
+        }
+        Primitive::Arc { x, y, start_angle, end_angle, .. } => {
+            // Rotate center
+            let rotated_x = *x * cos_a - *y * sin_a;
+            let rotated_y = *x * sin_a + *y * cos_a;
+            *x = rotated_x;
+            *y = rotated_y;
+
+            // Rotate arc angles
+            *start_angle += rotation_angle;
+            *end_angle += rotation_angle;
+        }
+        Primitive::Thermal { x, y, rotation, .. } => {
+            // Rotate center
+            let rotated_x = *x * cos_a - *y * sin_a;
+            let rotated_y = *x * sin_a + *y * cos_a;
+            *x = rotated_x;
+            *y = rotated_y;
+
+            // Add to thermal rotation
+            *rotation += rotation_angle;
+        }
+    }
+}
+
 /// Triangulate outline into triangles
 pub fn triangulate_outline(vertices: &[[f32; 2]], exposure: f32) -> Result<Vec<Primitive>, String> {
     if vertices.len() < 3 {
@@ -522,7 +636,7 @@ fn flash_aperture_no_sr(
     primitives: &mut Vec<Primitive>,
     x: f32,
     y: f32,
-    layer_scale: f32,
+    state: &ParserState,
 ) {
     // Use pre-calculated has_negative field for performance
     if aperture.has_negative {
@@ -532,9 +646,12 @@ fn flash_aperture_no_sr(
             .primitives
             .iter()
             .map(|p| {
-                let mut scaled_primitive = p.clone();
-                scale_primitive(&mut scaled_primitive, layer_scale);
-                let offset_p = offset_primitive_by(&scaled_primitive, x, y);
+                let mut transformed_primitive = p.clone();
+                // Apply transformations in order: scale → mirror → rotate → offset
+                scale_primitive(&mut transformed_primitive, state.layer_scale);
+                mirror_primitive(&mut transformed_primitive, state.mirror_x, state.mirror_y);
+                rotate_primitive(&mut transformed_primitive, state.rotation_angle);
+                let offset_p = offset_primitive_by(&transformed_primitive, x, y);
                 let poly = primitive_to_polygon(&offset_p);
                 let exposure = match &offset_p {
                     Primitive::Circle { exposure, .. } => *exposure,
@@ -554,7 +671,12 @@ fn flash_aperture_no_sr(
         // Direct primitive cloning
         for primitive in &aperture.primitives {
             let mut new_primitive = primitive.clone();
-            scale_primitive(&mut new_primitive, layer_scale);
+            // Apply transformations in order: scale → mirror → rotate → offset
+            scale_primitive(&mut new_primitive, state.layer_scale);
+            mirror_primitive(&mut new_primitive, state.mirror_x, state.mirror_y);
+            rotate_primitive(&mut new_primitive, state.rotation_angle);
+
+            // Apply offset
             match &mut new_primitive {
                 Primitive::Circle { x: px, y: py, hole_x: hx, hole_y: hy, .. } => {
                     *px += x;
@@ -598,7 +720,7 @@ pub fn flash_aperture(
             for sx in 0..state.sr_x {
                 let flash_x = x + sx as f32 * state.sr_i;
                 let flash_y = y + sy as f32 * state.sr_j;
-                flash_aperture_no_sr(aperture, primitives, flash_x, flash_y, state.layer_scale);
+                flash_aperture_no_sr(aperture, primitives, flash_x, flash_y, state);
             }
         }
     }
@@ -638,7 +760,7 @@ pub fn execute_interpolation(
                                 primitives,
                                 sr_start_x,
                                 sr_start_y,
-                                state.layer_scale,
+                                state,
                             );
 
                             // Convert vector line with width of aperture diameter to triangle
@@ -661,7 +783,7 @@ pub fn execute_interpolation(
                                 primitives,
                                 sr_end_x,
                                 sr_end_y,
-                                state.layer_scale,
+                                state,
                             );
                         }
                     }
@@ -685,7 +807,7 @@ pub fn execute_interpolation(
                                 primitives,
                                 sr_start_x,
                                 sr_start_y,
-                                state.layer_scale,
+                                state,
                             );
 
                             // Find the correct arc center
@@ -781,7 +903,7 @@ pub fn execute_interpolation(
                                 primitives,
                                 sr_end_x,
                                 sr_end_y,
-                                state.layer_scale,
+                                state,
                             );
                         }
                     }

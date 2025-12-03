@@ -337,11 +337,15 @@ fn create_block_aperture(
     block_commands: &[String],
     state: &ParserState,
     apertures: &HashMap<String, Aperture>,
+    macros: &HashMap<String, ApertureMacro>,
 ) -> Aperture {
     // Create temporary state for parsing block commands
     let mut temp_state = state.clone();
     temp_state.x = 0.0;
     temp_state.y = 0.0;
+
+    // Create local apertures map (start with global apertures, add block-local ones)
+    let mut local_apertures = apertures.clone();
 
     // Create temporary primitives vector
     let mut temp_primitives = Vec::new();
@@ -354,18 +358,40 @@ fn create_block_aperture(
             continue;
         }
 
-        // Parse graphic commands (G/D/XY codes)
-        if cmd.starts_with('G')
+        if cmd.starts_with('%') {
+            // Handle % commands inside block
+            if cmd.starts_with("%ADD") {
+                // Aperture definition inside block
+                parse_aperture(
+                    cmd,
+                    &mut local_apertures,
+                    macros,
+                    temp_state.unit_multiplier,
+                    temp_state.layer_scale,
+                );
+            } else if cmd.starts_with("%LP") {
+                // Polarity change inside block
+                parse_lp(
+                    cmd,
+                    &mut temp_state,
+                    &mut temp_primitives,
+                    &mut Vec::new(), // Dummy positive_layers
+                    &mut Vec::new(), // Dummy negative_layers
+                );
+            }
+            // Other % commands can be added here if needed
+        } else if cmd.starts_with('G')
             || cmd.starts_with('D')
             || cmd.starts_with('X')
             || cmd.starts_with('Y')
             || cmd.starts_with('I')
             || cmd.starts_with('J')
         {
+            // Parse graphic commands (G/D/XY codes)
             parse_graphic_command(
                 cmd,
                 &mut temp_state,
-                apertures,
+                &local_apertures,
                 &mut temp_primitives,
                 &mut temp_region_contours,
             );
@@ -482,7 +508,7 @@ fn parse_command(
             // End of block definition: %AB*%
             if state.in_aperture_block {
                 // Parse block_commands and create block aperture
-                let block_aperture = create_block_aperture(&state.block_commands, state, apertures);
+                let block_aperture = create_block_aperture(&state.block_commands, state, apertures, macros);
                 apertures.insert(state.block_aperture_code.clone(), block_aperture);
                 state.in_aperture_block = false;
                 state.block_commands.clear();
