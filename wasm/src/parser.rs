@@ -10,7 +10,7 @@ pub use state::{FormatSpec, ParserState, Polarity};
 // Internal use only
 use aperture::parse_aperture;
 use aperture_macro::{parse_macro, ApertureMacro};
-use state::{parse_format_spec, parse_if, parse_lp, parse_ls, parse_mo, parse_sr};
+use state::{parse_format_spec, parse_if, parse_lm, parse_lp, parse_ls, parse_mo, parse_sr};
 
 use self::geometry::{parse_graphic_command, Primitive};
 use crate::shape::{Arcs, Boundary, Circles, GerberData, Thermals, Triangles};
@@ -399,7 +399,7 @@ fn parse_command(
         // TODO: Implement full block aperture support
     } else if line.starts_with("%LM") {
         // Layer mirroring: %LMN*, %LMX*, %LMY*, %LMXY*
-        // TODO: Implement mirroring transformation
+        parse_lm(&line, state);
     } else if line.starts_with("%LR") {
         // Layer rotation: %LR45.0*
         // TODO: Implement rotation transformation

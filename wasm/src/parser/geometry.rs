@@ -918,8 +918,12 @@ pub fn parse_graphic_command(
 
     // Process X coordinate
     if let Some(x_val) = x_match.as_ref() {
-        let new_x =
+        let mut new_x =
             convert_coordinate(x_val, 'x', &state.format_spec, state.unit_multiplier) * state.scale * state.layer_scale;
+        // Apply X mirroring
+        if state.mirror_x {
+            new_x = -new_x;
+        }
         x = if state.coordinate_mode == "absolute" {
             new_x
         } else {
@@ -929,8 +933,12 @@ pub fn parse_graphic_command(
 
     // Process Y coordinate
     if let Some(y_val) = y_match.as_ref() {
-        let new_y =
+        let mut new_y =
             convert_coordinate(y_val, 'y', &state.format_spec, state.unit_multiplier) * state.scale * state.layer_scale;
+        // Apply Y mirroring
+        if state.mirror_y {
+            new_y = -new_y;
+        }
         y = if state.coordinate_mode == "absolute" {
             new_y
         } else {
@@ -940,8 +948,12 @@ pub fn parse_graphic_command(
 
     // Process I coordinate (arc center X offset)
     if let Some(i_val) = i_match.as_ref() {
-        let raw_i =
+        let mut raw_i =
             convert_coordinate(i_val, 'x', &state.format_spec, state.unit_multiplier) * state.scale * state.layer_scale;
+        // Apply X mirroring to I offset
+        if state.mirror_x {
+            raw_i = -raw_i;
+        }
         i = if state.quadrant_mode == "single" {
             raw_i.abs()
         } else {
@@ -951,8 +963,12 @@ pub fn parse_graphic_command(
 
     // Process J coordinate (arc center Y offset)
     if let Some(j_val) = j_match.as_ref() {
-        let raw_j =
+        let mut raw_j =
             convert_coordinate(j_val, 'y', &state.format_spec, state.unit_multiplier) * state.scale * state.layer_scale;
+        // Apply Y mirroring to J offset
+        if state.mirror_y {
+            raw_j = -raw_j;
+        }
         j = if state.quadrant_mode == "single" {
             raw_j.abs()
         } else {

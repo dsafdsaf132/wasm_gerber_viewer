@@ -59,6 +59,9 @@ pub struct ParserState {
     pub sr_j: f32,
     // Layer Scaling
     pub layer_scale: f32,
+    // Layer Mirroring
+    pub mirror_x: bool,
+    pub mirror_y: bool,
 }
 
 impl Default for ParserState {
@@ -83,6 +86,8 @@ impl Default for ParserState {
             sr_i: 0.0,
             sr_j: 0.0,
             layer_scale: 1.0,
+            mirror_x: false,
+            mirror_y: false,
         }
     }
 }
@@ -349,5 +354,44 @@ pub fn parse_ls(line: &str, state: &mut ParserState) {
             state.y *= ratio;
         }
         state.layer_scale = new_scale;
+    }
+}
+
+/// Parse Layer Mirroring - %LMN*%, %LMX*%, %LMY*%, %LMXY*%
+/// Format: %LM[N|X|Y|XY]*%
+/// - N: No mirroring (default)
+/// - X: Mirror on X axis (x → -x)
+/// - Y: Mirror on Y axis (y → -y)
+/// - XY: Mirror on both axes (x → -x, y → -y)
+pub fn parse_lm(line: &str, state: &mut ParserState) {
+    let spec_str = line
+        .trim_start_matches('%')
+        .trim_end_matches('%')
+        .trim_end_matches('*');
+
+    if !spec_str.starts_with("LM") {
+        return;
+    }
+
+    let mirror_str = &spec_str[2..]; // "N", "X", "Y", or "XY" part
+
+    match mirror_str {
+        "N" => {
+            state.mirror_x = false;
+            state.mirror_y = false;
+        }
+        "X" => {
+            state.mirror_x = true;
+            state.mirror_y = false;
+        }
+        "Y" => {
+            state.mirror_x = false;
+            state.mirror_y = true;
+        }
+        "XY" => {
+            state.mirror_x = true;
+            state.mirror_y = true;
+        }
+        _ => {}
     }
 }
