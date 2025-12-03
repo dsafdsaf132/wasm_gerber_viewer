@@ -52,13 +52,13 @@ wasm_gerber_viewer/
         ├── lib.rs                         # WASM entry point (GerberProcessor)
         ├── geometry.rs                    # Geometric operations and primitives
         ├── shape.rs                       # Geometry data structures
-        ├── parser/                        # Gerber file parsing module
-        │   ├── mod.rs                     # Parser entry point and main logic
+        ├── parser.rs                      # Parser entry point and main logic
+        ├── parser/                        # Gerber file parsing submodules
         │   ├── state.rs                   # Parser state and configuration
         │   ├── aperture.rs                # Aperture definitions and parsing
         │   └── aperture_macro.rs          # Aperture macro definitions and parsing
-        └── renderer/                      # WebGL2 rendering module
-            ├── mod.rs                     # Renderer core logic
+        ├── renderer.rs                    # Renderer core logic
+        └── renderer/                      # WebGL2 rendering submodules
             ├── shader.rs                  # Shader compilation and WebGL constants
             ├── camera.rs                  # Camera and viewport transformations
             └── buffer.rs                  # GPU buffer and framebuffer structures
