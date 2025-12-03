@@ -228,9 +228,6 @@ export class GerberViewer {
 
   async handleOdbFile(file) {
     try {
-      // Reset ODB++ parser before processing new file
-      this.wasmProcessor.reset_odb();
-
       // Unzip the ODB++ file using JSZip
       const zipData = await JSZip.loadAsync(file);
 
@@ -294,6 +291,9 @@ export class GerberViewer {
       if (layerIds.length === 0) {
         throw new Error('Failed to add any ODB++ layers');
       }
+
+      // Reset ODB++ parser state after processing (for memory stability)
+      this.wasmProcessor.reset_odb();
     } catch (error) {
       throw new Error(`Failed to extract ODB++ file: ${error.message}`);
     }
