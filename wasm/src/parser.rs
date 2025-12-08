@@ -19,7 +19,7 @@ use std::mem::take;
 use wasm_bindgen::prelude::*;
 
 // Security limits for resource consumption
-const MAX_PRIMITIVES_PER_LAYER: usize = 1_000_000; // 1 million primitives max
+const MAX_PRIMITIVES_PER_LAYER: usize = 50_000_000; // 50 million primitives max per layer
 const MAX_TOTAL_PRIMITIVES: usize = 100_000_000; // 100 million total primitives
 
 /// Gerber parser with stateful aperture and macro storage
