@@ -116,14 +116,14 @@ pub fn parse_aperture(
                         let v4 = [-half_width, half_height];
 
                         aperture.primitives.push(Primitive::Triangle {
-                            vertices: vec![v1, v2, v3],
+                            vertices: [v1, v2, v3],
                             exposure: 1.0,
                             hole_x: 0.0,
                             hole_y: 0.0,
                             hole_radius: hole_diameter_mm / 2.0,
                         });
                         aperture.primitives.push(Primitive::Triangle {
-                            vertices: vec![v1, v3, v4],
+                            vertices: [v1, v3, v4],
                             exposure: 1.0,
                             hole_x: 0.0,
                             hole_y: 0.0,
@@ -191,14 +191,14 @@ pub fn parse_aperture(
                             let y2 = half_height;
 
                             aperture.primitives.push(Primitive::Triangle {
-                                vertices: vec![[x1, y1], [x2, y1], [x1, y2]],
+                                vertices: [[x1, y1], [x2, y1], [x1, y2]],
                                 exposure: 1.0,
                                 hole_x: 0.0,
                                 hole_y: 0.0,
                                 hole_radius: hole_diameter_mm / 2.0,
                             });
                             aperture.primitives.push(Primitive::Triangle {
-                                vertices: vec![[x2, y1], [x2, y2], [x1, y2]],
+                                vertices: [[x2, y1], [x2, y2], [x1, y2]],
                                 exposure: 1.0,
                                 hole_x: 0.0,
                                 hole_y: 0.0,
@@ -239,14 +239,14 @@ pub fn parse_aperture(
                             let y2 = half_rect_height;
 
                             aperture.primitives.push(Primitive::Triangle {
-                                vertices: vec![[x1, y1], [x2, y1], [x1, y2]],
+                                vertices: [[x1, y1], [x2, y1], [x1, y2]],
                                 exposure: 1.0,
                                 hole_x: 0.0,
                                 hole_y: 0.0,
                                 hole_radius: hole_diameter_mm / 2.0,
                             });
                             aperture.primitives.push(Primitive::Triangle {
-                                vertices: vec![[x2, y1], [x2, y2], [x1, y2]],
+                                vertices: [[x2, y1], [x2, y2], [x1, y2]],
                                 exposure: 1.0,
                                 hole_x: 0.0,
                                 hole_y: 0.0,
@@ -303,7 +303,7 @@ pub fn parse_aperture(
                             let y2 = radius * angle_next.sin();
 
                             aperture.primitives.push(Primitive::Triangle {
-                                vertices: vec![[0.0, 0.0], [x1, y1], [x2, y2]],
+                                vertices: [[0.0, 0.0], [x1, y1], [x2, y2]],
                                 exposure: 1.0,
                                 hole_x: 0.0,
                                 hole_y: 0.0,
