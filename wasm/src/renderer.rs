@@ -435,16 +435,6 @@ impl Renderer {
             .ok_or_else(|| JsValue::from_str("Layer deallocated"))
     }
 
-    /// Get mutable layer reference with error handling
-    fn get_layer_mut(&mut self, layer_id: usize) -> Result<&mut LayerMetadata, JsValue> {
-        if layer_id >= self.layers.len() {
-            return Err(JsValue::from_str("Invalid layer index"));
-        }
-        self.layers[layer_id]
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("Layer deallocated"))
-    }
-
     /// Update camera state
     fn update_camera(&mut self, zoom: f32, offset_x: f32, offset_y: f32) {
         self.camera.zoom = zoom;
