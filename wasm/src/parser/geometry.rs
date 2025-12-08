@@ -614,8 +614,20 @@ pub fn convert_coordinate(
             _ => 10000.0,
         };
 
+        // Check for division by zero
+        if divisor == 0.0 || !divisor.is_finite() {
+            return 0.0;
+        }
+
         // Divide by decimal point position (no padding) and then convert units (1.0 for mm, 25.4 for inch)
-        (val as f64 / divisor) as f32 * unit_multiplier
+        let result = (val as f64 / divisor) as f32 * unit_multiplier;
+
+        // Check for numeric overflow
+        if !result.is_finite() {
+            return 0.0;
+        }
+
+        result
     } else {
         0.0
     }

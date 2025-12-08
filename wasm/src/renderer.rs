@@ -350,10 +350,11 @@ impl Renderer {
             let array = Float32Array::view(data);
             gl.buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
         }
-        let loc = *program.attributes.get(attr_name).unwrap();
-        gl.enable_vertex_attrib_array(loc);
-        gl.vertex_attrib_pointer_with_i32(loc, 1, FLOAT, false, 0, 0);
-        gl.vertex_attrib_divisor(loc, divisor);
+        let loc = program.attributes.get(attr_name)
+            .ok_or_else(|| JsValue::from_str(&format!("Missing shader attribute: {}", attr_name)))?;
+        gl.enable_vertex_attrib_array(*loc);
+        gl.vertex_attrib_pointer_with_i32(*loc, 1, FLOAT, false, 0, 0);
+        gl.vertex_attrib_divisor(*loc, divisor);
         Ok(buffer)
     }
 
@@ -373,10 +374,11 @@ impl Renderer {
             let array = Float32Array::view(data);
             gl.buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
         }
-        let loc = *program.attributes.get(attr_name).unwrap();
-        gl.enable_vertex_attrib_array(loc);
-        gl.vertex_attrib_pointer_with_i32(loc, 2, FLOAT, false, 0, 0);
-        gl.vertex_attrib_divisor(loc, divisor);
+        let loc = program.attributes.get(attr_name)
+            .ok_or_else(|| JsValue::from_str(&format!("Missing shader attribute: {}", attr_name)))?;
+        gl.enable_vertex_attrib_array(*loc);
+        gl.vertex_attrib_pointer_with_i32(*loc, 2, FLOAT, false, 0, 0);
+        gl.vertex_attrib_divisor(*loc, divisor);
         Ok(buffer)
     }
 
@@ -423,6 +425,26 @@ impl Renderer {
         Self::get_canvas_size_from_gl(&self.gl)
     }
 
+    /// Get layer reference with error handling
+    fn get_layer(&self, layer_id: usize) -> Result<&LayerMetadata, JsValue> {
+        if layer_id >= self.layers.len() {
+            return Err(JsValue::from_str("Invalid layer index"));
+        }
+        self.layers[layer_id]
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("Layer deallocated"))
+    }
+
+    /// Get mutable layer reference with error handling
+    fn get_layer_mut(&mut self, layer_id: usize) -> Result<&mut LayerMetadata, JsValue> {
+        if layer_id >= self.layers.len() {
+            return Err(JsValue::from_str("Invalid layer index"));
+        }
+        self.layers[layer_id]
+            .as_mut()
+            .ok_or_else(|| JsValue::from_str("Layer deallocated"))
+    }
+
     /// Update camera state
     fn update_camera(&mut self, zoom: f32, offset_x: f32, offset_y: f32) {
         self.camera.zoom = zoom;
@@ -437,10 +459,11 @@ impl Renderer {
 
         // Use the shared quad buffer
         self.gl.bind_buffer(ARRAY_BUFFER, Some(&self.quad_buffer));
-        let pos_loc = *program.attributes.get("position").unwrap();
-        self.gl.enable_vertex_attrib_array(pos_loc);
+        let pos_loc = program.attributes.get("position")
+            .ok_or_else(|| JsValue::from_str("Missing shader attribute: position"))?;
+        self.gl.enable_vertex_attrib_array(*pos_loc);
         self.gl
-            .vertex_attrib_pointer_with_i32(pos_loc, 2, FLOAT, false, 0, 0);
+            .vertex_attrib_pointer_with_i32(*pos_loc, 2, FLOAT, false, 0, 0);
 
         self.gl.active_texture(WebGl2RenderingContext::TEXTURE0);
         self.gl
@@ -464,7 +487,7 @@ impl Renderer {
     ) -> Result<(), JsValue> {
         // Check if data is empty (short-lived borrow)
         {
-            let layer = self.layers[layer_id].as_ref().unwrap();
+            let layer = self.get_layer(layer_id)?;
             if layer.gerber_data[sublayer_idx].triangles.indices.is_empty() {
                 return Ok(());
             }
@@ -475,9 +498,7 @@ impl Renderer {
 
         // Buffer creation/update phase (scoped to end borrow early)
         let index_count = {
-            let layer = self.layers[layer_id]
-                .as_mut()
-                .ok_or_else(|| JsValue::from_str("Layer not found"))?;
+            let layer = self.get_layer_mut(layer_id)?;
             let triangles = &layer.gerber_data[sublayer_idx].triangles;
             let buffer_cache = &mut layer.buffer_caches[sublayer_idx];
 
@@ -519,10 +540,11 @@ impl Renderer {
                 }
 
                 // Set up attributes
-                let position_loc = *program.attributes.get("position").unwrap();
-                self.gl.enable_vertex_attrib_array(position_loc);
+                let position_loc = program.attributes.get("position")
+                    .ok_or_else(|| JsValue::from_str("Missing shader attribute: position"))?;
+                self.gl.enable_vertex_attrib_array(*position_loc);
                 self.gl
-                    .vertex_attrib_pointer_with_i32(position_loc, 2, FLOAT, false, 0, 0);
+                    .vertex_attrib_pointer_with_i32(*position_loc, 2, FLOAT, false, 0, 0);
 
                 // Create regular attribute buffers for hole data (per-vertex)
                 let hole_centers = Self::interleave_xy(&triangles.hole_x, &triangles.hole_y);
@@ -536,10 +558,11 @@ impl Renderer {
                     self.gl
                         .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
                 }
-                let hole_center_loc = *program.attributes.get("hole_center_instance").unwrap();
-                self.gl.enable_vertex_attrib_array(hole_center_loc);
+                let hole_center_loc = program.attributes.get("hole_center_instance")
+                    .ok_or_else(|| JsValue::from_str("Missing shader attribute: hole_center_instance"))?;
+                self.gl.enable_vertex_attrib_array(*hole_center_loc);
                 self.gl
-                    .vertex_attrib_pointer_with_i32(hole_center_loc, 2, FLOAT, false, 0, 0);
+                    .vertex_attrib_pointer_with_i32(*hole_center_loc, 2, FLOAT, false, 0, 0);
 
                 let hole_radius_buffer = self
                     .gl
@@ -551,10 +574,11 @@ impl Renderer {
                     self.gl
                         .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
                 }
-                let hole_radius_loc = *program.attributes.get("hole_radius_instance").unwrap();
-                self.gl.enable_vertex_attrib_array(hole_radius_loc);
+                let hole_radius_loc = program.attributes.get("hole_radius_instance")
+                    .ok_or_else(|| JsValue::from_str("Missing shader attribute: hole_radius_instance"))?;
+                self.gl.enable_vertex_attrib_array(*hole_radius_loc);
                 self.gl
-                    .vertex_attrib_pointer_with_i32(hole_radius_loc, 1, FLOAT, false, 0, 0);
+                    .vertex_attrib_pointer_with_i32(*hole_radius_loc, 1, FLOAT, false, 0, 0);
 
                 // Unbind VAO
                 self.gl.bind_vertex_array(None);
@@ -571,7 +595,7 @@ impl Renderer {
         }; // Borrow ends here
 
         // Rendering phase (new borrow)
-        let layer = self.layers[layer_id].as_ref().unwrap();
+        let layer = self.get_layer(layer_id)?;
         let buffer_cache = &layer.buffer_caches[sublayer_idx];
 
         // Bind cached VAO for this sublayer

@@ -199,25 +199,92 @@ export class GerberViewer {
   }
 
   async handleFileUpload(files) {
-    // Process all files in parallel (skip rendering during parallel processing)
-    const promises = Array.from(files).map(async (file) => {
-      try {
-        const content = await file.text();
-        await this.addLayer(file.name, content);
-      } catch (error) {
-        console.error(`Failed to load file ${file.name}:`, error);
+    const MAX_FILE_SIZE = 300 * 1024 * 1024; // 300 MB
+    const oversizedFiles = [];
+    const validFiles = [];
+
+    // Validate file sizes
+    for (const file of files) {
+      if (file.size > MAX_FILE_SIZE) {
+        oversizedFiles.push({
+          name: file.name,
+          size: this.formatFileSize(file.size),
+          limit: this.formatFileSize(MAX_FILE_SIZE),
+        });
+      } else {
+        validFiles.push(file);
       }
-    });
+    }
 
-    await Promise.all(promises);
+    // Show warning for oversized files
+    if (oversizedFiles.length > 0) {
+      this.showFileSizeWarning(oversizedFiles);
+    }
 
-    // Render once after all layers are added
-    this.renderLayerList();
-    this.render();
-    this.fitView();
+    // Process valid files in parallel
+    if (validFiles.length > 0) {
+      const promises = validFiles.map(async (file) => {
+        try {
+          const content = await file.text();
+          await this.addLayer(file.name, content);
+        } catch (error) {
+          console.error(`Failed to load file ${file.name}:`, error);
+          this.showError(`Failed to load file ${file.name}: ${error.message}`);
+        }
+      });
+
+      await Promise.all(promises);
+
+      // Render once after all layers are added
+      this.renderLayerList();
+      this.render();
+      this.fitView();
+    }
 
     // Clear file input
     this.fileInput.value = "";
+  }
+
+  formatFileSize(bytes) {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+  }
+
+  showFileSizeWarning(oversizedFiles) {
+    const warningDiv = document.getElementById("file-size-warning");
+    const warningMessage = document.getElementById("warning-message");
+
+    let message = "<br>";
+    oversizedFiles.forEach((file) => {
+      message += `<br>• <strong>${file.name}</strong>: ${file.size} (limit: ${file.limit})`;
+    });
+
+    warningMessage.innerHTML = message;
+    warningDiv.style.display = "block";
+
+    // Auto-hide after 8 seconds
+    setTimeout(() => {
+      warningDiv.style.display = "none";
+    }, 8000);
+  }
+
+  showError(message) {
+    const warningDiv = document.getElementById("file-size-warning");
+    const warningTitle = document.getElementById("warning-title");
+    const warningMessage = document.getElementById("warning-message");
+
+    warningTitle.textContent = "Error";
+    warningMessage.textContent = message;
+    warningDiv.style.display = "block";
+
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      warningDiv.style.display = "none";
+      warningTitle.textContent = "Warning";
+    }, 5000);
   }
 
   async addLayer(name, content) {
