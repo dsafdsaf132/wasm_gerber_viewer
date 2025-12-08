@@ -488,7 +488,7 @@ pub fn parse_primitive_statement(
             for i in 0..(num_vertices as usize) {
                 let next_i = (i + 1) % (num_vertices as usize);
                 let mut triangle = Primitive::Triangle {
-                    vertices: vec![[center_x, center_y], vertices[i], vertices[next_i]],
+                    vertices: [[center_x, center_y], vertices[i], vertices[next_i]],
                     exposure,
                     hole_x: 0.0,
                     hole_y: 0.0,
@@ -604,14 +604,14 @@ pub fn parse_primitive_statement(
 
             // Two triangles: (v1, v2, v3), (v1, v3, v4)
             let mut tri1 = Primitive::Triangle {
-                vertices: vec![v1, v2, v3],
+                vertices: [v1, v2, v3],
                 exposure,
                 hole_x: 0.0,
                 hole_y: 0.0,
                 hole_radius: 0.0,
             };
             let mut tri2 = Primitive::Triangle {
-                vertices: vec![v1, v3, v4],
+                vertices: [v1, v3, v4],
                 exposure,
                 hole_x: 0.0,
                 hole_y: 0.0,

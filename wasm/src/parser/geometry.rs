@@ -5,11 +5,112 @@ use i_overlay::float::single::SingleFloatOverlay;
 use i_triangle::float::triangulatable::Triangulatable;
 use std::collections::HashMap;
 
+/// Primitive type discriminant
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PrimitiveType {
+    Circle = 0,
+    Triangle = 1,
+    Arc = 2,
+    Thermal = 3,
+}
+
+/// Packed primitive - memory-efficient representation
+/// First element (ptype) indicates the primitive type, remaining elements store geometry data
+#[derive(Clone, Copy, Debug)]
+pub struct PackedPrimitive {
+    pub ptype: u32,      // PrimitiveType as u32
+    pub data: [f32; 12], // Fixed-size array for geometry data
+}
+
+impl PackedPrimitive {
+    /// Create PackedPrimitive from Primitive enum
+    pub fn from_primitive(p: &Primitive) -> Self {
+        match p {
+            Primitive::Circle { x, y, radius, exposure, hole_x, hole_y, hole_radius } => {
+                PackedPrimitive {
+                    ptype: PrimitiveType::Circle as u32,
+                    data: [*x, *y, *radius, *exposure, *hole_x, *hole_y, *hole_radius, 0.0, 0.0, 0.0, 0.0, 0.0],
+                }
+            }
+            Primitive::Triangle { vertices, exposure, hole_x, hole_y, hole_radius } => {
+                PackedPrimitive {
+                    ptype: PrimitiveType::Triangle as u32,
+                    data: [
+                        vertices[0][0], vertices[0][1],
+                        vertices[1][0], vertices[1][1],
+                        vertices[2][0], vertices[2][1],
+                        *exposure, *hole_x, *hole_y, *hole_radius,
+                        0.0, 0.0,
+                    ],
+                }
+            }
+            Primitive::Arc { x, y, radius, start_angle, end_angle, thickness, exposure } => {
+                PackedPrimitive {
+                    ptype: PrimitiveType::Arc as u32,
+                    data: [*x, *y, *radius, *start_angle, *end_angle, *thickness, *exposure, 0.0, 0.0, 0.0, 0.0, 0.0],
+                }
+            }
+            Primitive::Thermal { x, y, outer_diameter, inner_diameter, gap_thickness, rotation, exposure } => {
+                PackedPrimitive {
+                    ptype: PrimitiveType::Thermal as u32,
+                    data: [*x, *y, *outer_diameter, *inner_diameter, *gap_thickness, *rotation, *exposure, 0.0, 0.0, 0.0, 0.0, 0.0],
+                }
+            }
+        }
+    }
+
+    /// Convert PackedPrimitive back to Primitive enum
+    pub fn to_primitive(&self) -> Primitive {
+        match self.ptype {
+            0 => Primitive::Circle {
+                x: self.data[0],
+                y: self.data[1],
+                radius: self.data[2],
+                exposure: self.data[3],
+                hole_x: self.data[4],
+                hole_y: self.data[5],
+                hole_radius: self.data[6],
+            },
+            1 => Primitive::Triangle {
+                vertices: [
+                    [self.data[0], self.data[1]],
+                    [self.data[2], self.data[3]],
+                    [self.data[4], self.data[5]],
+                ],
+                exposure: self.data[6],
+                hole_x: self.data[7],
+                hole_y: self.data[8],
+                hole_radius: self.data[9],
+            },
+            2 => Primitive::Arc {
+                x: self.data[0],
+                y: self.data[1],
+                radius: self.data[2],
+                start_angle: self.data[3],
+                end_angle: self.data[4],
+                thickness: self.data[5],
+                exposure: self.data[6],
+            },
+            3 => Primitive::Thermal {
+                x: self.data[0],
+                y: self.data[1],
+                outer_diameter: self.data[2],
+                inner_diameter: self.data[3],
+                gap_thickness: self.data[4],
+                rotation: self.data[5],
+                exposure: self.data[6],
+            },
+            _ => panic!("Invalid primitive type: {}", self.ptype),
+        }
+    }
+}
+
 /// Basic primitive shape - created directly by parser
 #[derive(Clone, Debug)]
 pub enum Primitive {
     Triangle {
-        vertices: Vec<[f32; 2]>,
+        vertices: [[f32; 2]; 3], // Changed from Vec to fixed array
         exposure: f32, // 1.0 = positive, 0.0 = negative
         hole_x: f32,   // Hole center X (relative to triangle)
         hole_y: f32,   // Hole center Y (relative to triangle)
@@ -127,7 +228,7 @@ pub fn triangulate_outline(vertices: &[[f32; 2]], exposure: f32) -> Result<Vec<P
                     && i2 < tri_result.points.len()
                 {
                     triangles.push(Primitive::Triangle {
-                        vertices: vec![
+                        vertices: [
                             tri_result.points[i0],
                             tri_result.points[i1],
                             tri_result.points[i2],
@@ -177,14 +278,14 @@ pub fn line_to_triangles(
     // Two triangles: (v1, v2, v3), (v2, v4, v3)
     vec![
         Primitive::Triangle {
-            vertices: vec![v1, v2, v3],
+            vertices: [v1, v2, v3],
             exposure,
             hole_x: 0.0,
             hole_y: 0.0,
             hole_radius: 0.0,
         },
         Primitive::Triangle {
-            vertices: vec![v2, v4, v3],
+            vertices: [v2, v4, v3],
             exposure,
             hole_x: 0.0,
             hole_y: 0.0,
@@ -209,7 +310,7 @@ pub fn primitive_to_polygon(primitive: &Primitive) -> Vec<[f32; 2]> {
 
         Primitive::Triangle { vertices, .. } => {
             // Already a polygon
-            vertices.clone()
+            vertices.to_vec()
         }
 
         Primitive::Arc {
@@ -377,7 +478,7 @@ pub fn triangulate_shape_with_holes(
                 && idx2 < tri_result.points.len()
             {
                 triangles.push(Primitive::Triangle {
-                    vertices: vec![
+                    vertices: [
                         tri_result.points[idx0],
                         tri_result.points[idx1],
                         tri_result.points[idx2],
@@ -421,7 +522,11 @@ pub fn offset_primitive_by(primitive: &Primitive, dx: f32, dy: f32) -> Primitive
             hole_y,
             hole_radius,
         } => Primitive::Triangle {
-            vertices: vertices.iter().map(|[vx, vy]| [vx + dx, vy + dy]).collect(),
+            vertices: [
+                [vertices[0][0] + dx, vertices[0][1] + dy],
+                [vertices[1][0] + dx, vertices[1][1] + dy],
+                [vertices[2][0] + dx, vertices[2][1] + dy],
+            ],
             exposure: *exposure,
             hole_x: hole_x + dx,
             hole_y: hole_y + dy,
