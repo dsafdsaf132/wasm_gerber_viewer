@@ -19,8 +19,7 @@ use std::mem::take;
 use wasm_bindgen::prelude::*;
 
 // Security limits for resource consumption
-const MAX_PRIMITIVES_PER_LAYER: usize = 50_000_000; // 50 million primitives max per layer
-const MAX_TOTAL_PRIMITIVES: usize = 100_000_000; // 100 million total primitives
+const MAX_TOTAL_PRIMITIVES: usize = 70_000_000; // 70 million total primitives max
 
 /// Gerber parser with stateful aperture and macro storage
 pub struct GerberParser {
@@ -101,15 +100,6 @@ impl GerberParser {
 
         // Save last accumulated primitives by polarity
         if !self.current_primitives.is_empty() {
-            // Check limits before adding
-            if self.current_primitives.len() > MAX_PRIMITIVES_PER_LAYER {
-                return Err(JsValue::from_str(&format!(
-                    "Too many primitives in layer: {} (max: {})",
-                    self.current_primitives.len(),
-                    MAX_PRIMITIVES_PER_LAYER
-                )));
-            }
-
             self.total_primitives += self.current_primitives.len();
             if self.total_primitives > MAX_TOTAL_PRIMITIVES {
                 return Err(JsValue::from_str(&format!(
