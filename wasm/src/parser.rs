@@ -18,6 +18,10 @@ use std::collections::HashMap;
 use std::mem::take;
 use wasm_bindgen::prelude::*;
 
+// Security limits for resource consumption
+const MAX_PRIMITIVES_PER_LAYER: usize = 1_000_000; // 1 million primitives max
+const MAX_TOTAL_PRIMITIVES: usize = 10_000_000; // 10 million total primitives
+
 /// Gerber parser with stateful aperture and macro storage
 pub struct GerberParser {
     pub apertures: HashMap<String, Aperture>,
@@ -28,6 +32,7 @@ pub struct GerberParser {
     pub negative_layers: Vec<Vec<Primitive>>,
     pub current_primitives: Vec<Primitive>, // Accumulating primitives for current polarity
     pub region_contours: Vec<Vec<[f32; 2]>>, // Contour points collected in Region mode
+    total_primitives: usize, // Track total primitives for security limit
 }
 
 impl GerberParser {
@@ -41,6 +46,7 @@ impl GerberParser {
             negative_layers: Vec::new(),
             current_primitives: Vec::new(),
             region_contours: Vec::new(),
+            total_primitives: 0,
         }
     }
 
@@ -95,6 +101,24 @@ impl GerberParser {
 
         // Save last accumulated primitives by polarity
         if !self.current_primitives.is_empty() {
+            // Check limits before adding
+            if self.current_primitives.len() > MAX_PRIMITIVES_PER_LAYER {
+                return Err(JsValue::from_str(&format!(
+                    "Too many primitives in layer: {} (max: {})",
+                    self.current_primitives.len(),
+                    MAX_PRIMITIVES_PER_LAYER
+                )));
+            }
+
+            self.total_primitives += self.current_primitives.len();
+            if self.total_primitives > MAX_TOTAL_PRIMITIVES {
+                return Err(JsValue::from_str(&format!(
+                    "Too many total primitives: {} (max: {})",
+                    self.total_primitives,
+                    MAX_TOTAL_PRIMITIVES
+                )));
+            }
+
             if self.current_state.polarity == Polarity::Positive {
                 self.positive_layers
                     .push(take(&mut self.current_primitives));

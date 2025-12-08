@@ -459,11 +459,10 @@ impl Renderer {
 
         // Use the shared quad buffer
         self.gl.bind_buffer(ARRAY_BUFFER, Some(&self.quad_buffer));
-        let pos_loc = program.attributes.get("position")
-            .ok_or_else(|| JsValue::from_str("Missing shader attribute: position"))?;
-        self.gl.enable_vertex_attrib_array(*pos_loc);
+        let pos_loc = *program.attributes.get("position").unwrap();
+        self.gl.enable_vertex_attrib_array(pos_loc);
         self.gl
-            .vertex_attrib_pointer_with_i32(*pos_loc, 2, FLOAT, false, 0, 0);
+            .vertex_attrib_pointer_with_i32(pos_loc, 2, FLOAT, false, 0, 0);
 
         self.gl.active_texture(WebGl2RenderingContext::TEXTURE0);
         self.gl
@@ -485,9 +484,18 @@ impl Renderer {
         layer_id: usize,
         sublayer_idx: usize,
     ) -> Result<(), JsValue> {
+        // Validate layer exists
+        if layer_id >= self.layers.len() {
+            return Err(JsValue::from_str("Invalid layer index"));
+        }
+
         // Check if data is empty (short-lived borrow)
         {
-            let layer = self.get_layer(layer_id)?;
+            let layer = if let Some(l) = &self.layers[layer_id] {
+                l
+            } else {
+                return Err(JsValue::from_str("Layer deallocated"));
+            };
             if layer.gerber_data[sublayer_idx].triangles.indices.is_empty() {
                 return Ok(());
             }
@@ -498,7 +506,11 @@ impl Renderer {
 
         // Buffer creation/update phase (scoped to end borrow early)
         let index_count = {
-            let layer = self.get_layer_mut(layer_id)?;
+            let layer = if let Some(l) = &mut self.layers[layer_id] {
+                l
+            } else {
+                return Err(JsValue::from_str("Layer deallocated"));
+            };
             let triangles = &layer.gerber_data[sublayer_idx].triangles;
             let buffer_cache = &mut layer.buffer_caches[sublayer_idx];
 
@@ -540,11 +552,10 @@ impl Renderer {
                 }
 
                 // Set up attributes
-                let position_loc = program.attributes.get("position")
-                    .ok_or_else(|| JsValue::from_str("Missing shader attribute: position"))?;
-                self.gl.enable_vertex_attrib_array(*position_loc);
+                let position_loc = *program.attributes.get("position").unwrap();
+                self.gl.enable_vertex_attrib_array(position_loc);
                 self.gl
-                    .vertex_attrib_pointer_with_i32(*position_loc, 2, FLOAT, false, 0, 0);
+                    .vertex_attrib_pointer_with_i32(position_loc, 2, FLOAT, false, 0, 0);
 
                 // Create regular attribute buffers for hole data (per-vertex)
                 let hole_centers = Self::interleave_xy(&triangles.hole_x, &triangles.hole_y);
@@ -558,11 +569,10 @@ impl Renderer {
                     self.gl
                         .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
                 }
-                let hole_center_loc = program.attributes.get("hole_center_instance")
-                    .ok_or_else(|| JsValue::from_str("Missing shader attribute: hole_center_instance"))?;
-                self.gl.enable_vertex_attrib_array(*hole_center_loc);
+                let hole_center_loc = *program.attributes.get("hole_center_instance").unwrap();
+                self.gl.enable_vertex_attrib_array(hole_center_loc);
                 self.gl
-                    .vertex_attrib_pointer_with_i32(*hole_center_loc, 2, FLOAT, false, 0, 0);
+                    .vertex_attrib_pointer_with_i32(hole_center_loc, 2, FLOAT, false, 0, 0);
 
                 let hole_radius_buffer = self
                     .gl
@@ -574,11 +584,10 @@ impl Renderer {
                     self.gl
                         .buffer_data_with_array_buffer_view(ARRAY_BUFFER, &array, STATIC_DRAW);
                 }
-                let hole_radius_loc = program.attributes.get("hole_radius_instance")
-                    .ok_or_else(|| JsValue::from_str("Missing shader attribute: hole_radius_instance"))?;
-                self.gl.enable_vertex_attrib_array(*hole_radius_loc);
+                let hole_radius_loc = *program.attributes.get("hole_radius_instance").unwrap();
+                self.gl.enable_vertex_attrib_array(hole_radius_loc);
                 self.gl
-                    .vertex_attrib_pointer_with_i32(*hole_radius_loc, 1, FLOAT, false, 0, 0);
+                    .vertex_attrib_pointer_with_i32(hole_radius_loc, 1, FLOAT, false, 0, 0);
 
                 // Unbind VAO
                 self.gl.bind_vertex_array(None);
@@ -631,7 +640,7 @@ impl Renderer {
     ) -> Result<(), JsValue> {
         // Check if data is empty (short-lived borrow)
         let instance_count = {
-            let layer = self.layers[layer_id].as_ref().unwrap();
+            let layer = self.get_layer(layer_id)?;
             layer.gerber_data[sublayer_idx].circles.x.len()
         };
         if instance_count == 0 {
@@ -704,7 +713,7 @@ impl Renderer {
         }
 
         // Re-get immutable reference for rendering
-        let layer = self.layers[layer_id].as_ref().unwrap();
+        let layer = self.get_layer(layer_id)?;
         let buffer_cache = &layer.buffer_caches[sublayer_idx];
 
         // Bind cached VAO for this sublayer
@@ -739,7 +748,7 @@ impl Renderer {
     ) -> Result<(), JsValue> {
         // Check if data is empty (short-lived borrow)
         let instance_count = {
-            let layer = self.layers[layer_id].as_ref().unwrap();
+            let layer = self.get_layer(layer_id)?;
             layer.gerber_data[sublayer_idx].arcs.x.len()
         };
         if instance_count == 0 {
@@ -819,7 +828,7 @@ impl Renderer {
         }
 
         // Re-get immutable reference for rendering
-        let layer = self.layers[layer_id].as_ref().unwrap();
+        let layer = self.get_layer(layer_id)?;
         let buffer_cache = &layer.buffer_caches[sublayer_idx];
 
         // Bind cached VAO for this sublayer
@@ -854,7 +863,7 @@ impl Renderer {
     ) -> Result<(), JsValue> {
         // Check if data is empty (short-lived borrow)
         let instance_count = {
-            let layer = self.layers[layer_id].as_ref().unwrap();
+            let layer = self.get_layer(layer_id)?;
             layer.gerber_data[sublayer_idx].thermals.x.len()
         };
         if instance_count == 0 {
@@ -934,7 +943,7 @@ impl Renderer {
         }
 
         // Re-get immutable reference for rendering
-        let layer = self.layers[layer_id].as_ref().unwrap();
+        let layer = self.get_layer(layer_id)?;
         let buffer_cache = &layer.buffer_caches[sublayer_idx];
 
         // Bind cached VAO for this sublayer
@@ -972,7 +981,7 @@ impl Renderer {
         let white_color = [1.0, 1.0, 1.0, 1.0];
 
         // Get sublayer count
-        let sublayer_count = self.layers[layer_id].as_ref().unwrap().gerber_data.len();
+        let sublayer_count = self.get_layer(layer_id)?.gerber_data.len();
 
         // Render each polarity sublayer with appropriate blending
         for sublayer_idx in 0..sublayer_count {
@@ -1028,16 +1037,16 @@ impl Renderer {
         for &layer_id in active_layer_ids {
             let layer_idx = layer_id as usize;
 
-            // Validate layer exists
-            if layer_idx >= self.layers.len() || self.layers[layer_idx].is_none() {
+            // Validate layer exists and get FBO
+            let layer = if layer_idx >= self.layers.len() || self.layers[layer_idx].is_none() {
                 return Err(JsValue::from_str(&format!(
                     "Invalid layer_id: {}",
                     layer_id
                 )));
-            }
-
-            // Get FBO for this layer
-            let fbo = &self.layers[layer_idx].as_ref().unwrap().fbo;
+            } else {
+                self.layers[layer_idx].as_ref().unwrap()
+            };
+            let fbo = &layer.fbo;
 
             // Bind layer FBO
             self.gl
