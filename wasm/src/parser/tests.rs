@@ -2717,3 +2717,119 @@ fn multiline_outline_macro_instantiates_geometry() {
 
     assert!(!primitives.is_empty());
 }
+
+#[test]
+fn multiple_commands_on_one_line_parse_like_one_command_per_line() {
+    let per_line = parse_gerber(
+        "\
+%FSLAX24Y24*%
+%MOMM*%
+%ADD10C,1.0*%
+D10*
+X000000Y000000D03*
+X010000Y000000D03*
+X020000Y010000D03*
+M02*",
+    )
+    .expect("one command per line should parse");
+    let packed = parse_gerber(
+        "\
+%FSLAX24Y24*%
+%MOMM*%
+%ADD10C,1.0*%
+D10*X000000Y000000D03*X010000Y000000D03*X020000Y010000D03*M02*",
+    )
+    .expect("several commands on one line should parse");
+
+    assert_eq!(packed.len(), per_line.len());
+    assert_eq!(packed[0].circles.x.len(), 3);
+    assert_eq!(packed[0].circles.x, per_line[0].circles.x);
+    assert_eq!(packed[0].circles.y, per_line[0].circles.y);
+    assert_eq!(packed[0].circles.radius, per_line[0].circles.radius);
+}
+
+#[test]
+fn extended_commands_inline_with_graphic_commands_are_isolated() {
+    let layers = parse_gerber(
+        "%FSLAX24Y24*%%MOMM*%%ADD10C,1.0*%D10*X000000Y000000D03*%LPC*%X010000Y000000D03*M02*",
+    )
+    .expect("whole file on a single line should parse");
+
+    assert_eq!(layers.len(), 2, "dark and clear polarity layers expected");
+    assert_eq!(layers[0].circles.x.len(), 1);
+    assert!(has_circle_at(&layers[0].circles, 0.0, 0.0, 0.5));
+    assert_eq!(layers[1].circles.x.len(), 1);
+    assert!(has_circle_at(&layers[1].circles, 1.0, 0.0, 0.5));
+}
+
+#[test]
+fn multi_line_aperture_macro_body_survives_packed_graphic_commands() {
+    let layers = parse_gerber(
+        "\
+%FSLAX24Y24*%
+%MOMM*%
+%AMDOT*
+1,1,$1,0,0*
+%
+%ADD11DOT,2.0*%
+D11*X000000Y000000D03*X030000Y000000D03*M02*",
+    )
+    .expect("macro aperture followed by packed flashes should parse");
+
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].circles.x.len(), 2);
+    assert!(has_circle_at(&layers[0].circles, 0.0, 0.0, 1.0));
+    assert!(has_circle_at(&layers[0].circles, 3.0, 0.0, 1.0));
+}
+
+#[test]
+fn packed_body_with_empty_commands_and_m00_terminator_parses() {
+    // Mirrors CAM output that writes the header one command per line and the
+    // entire body on a single line, including stray empty `*` commands and a
+    // deprecated M00 end-of-program.
+    let layers = parse_gerber(
+        "\
+%FSLAX44Y44*%
+%MOMM*%
+%ADD80C,0.37000*%
+*D80*X00617500Y00864500*D03*Y00856500*D03*X00609500Y00864500*D03**X0Y0D02*M00*",
+    )
+    .expect("packed body with empty commands should parse");
+
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].circles.x.len(), 3);
+    assert!(has_circle_at(&layers[0].circles, 61.75, 86.45, 0.185));
+    assert!(has_circle_at(&layers[0].circles, 61.75, 85.65, 0.185));
+    assert!(has_circle_at(&layers[0].circles, 60.95, 86.45, 0.185));
+}
+
+#[test]
+fn m02_stops_parsing_commands_that_follow_on_the_same_line() {
+    let layers = parse_gerber(
+        "\
+%FSLAX24Y24*%
+%MOMM*%
+%ADD10C,1.0*%
+D10*X000000Y000000D03*M02*X010000Y000000D03*",
+    )
+    .expect("flash before M02 should parse");
+
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].circles.x.len(), 1);
+    assert_approx_eq(layers[0].circles.x[0], 0.0);
+}
+
+#[test]
+fn comments_containing_percent_signs_do_not_open_extended_commands() {
+    let layers = parse_gerber(
+        "\
+%FSLAX24Y24*%
+%MOMM*%
+%ADD10C,1.0*%
+G04 progress 50% done*D10*X000000Y000000D03*M02*",
+    )
+    .expect("comment with a percent sign should be ignored");
+
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].circles.x.len(), 1);
+}

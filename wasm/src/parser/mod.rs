@@ -40,12 +40,85 @@ pub struct ParsedGerberLayer {
     pub interaction_layer: Option<InteractionLayer>,
 }
 
+/// Split Gerber content into one command per entry.
+///
+/// The Gerber format delimits commands with `*`; line breaks carry no meaning,
+/// so a file may put every command on its own line or pack thousands of them
+/// onto a single line. Extended commands (`%...%`) are kept as a unit, and the
+/// body lines of a multi-line extended command such as an aperture macro are
+/// passed through untouched so `parse_command` can accumulate them exactly as
+/// before.
 fn collect_lines(data: &str) -> Result<Vec<&str>, JsValue> {
     let line_count = data.bytes().filter(|byte| *byte == b'\n').count() + 1;
     let mut lines = Vec::new();
     try_reserve_exact(&mut lines, line_count, "Gerber line index buffer")?;
-    lines.extend(data.split('\n'));
+
+    let mut in_extended_command = false;
+    for line in data.split('\n') {
+        let mut rest = line;
+        loop {
+            if in_extended_command {
+                // Inside a multi-line `%...%` block: emit the raw text up to and
+                // including the closing `%`, then keep scanning after it.
+                match rest.find('%') {
+                    Some(close) => {
+                        push_line(&mut lines, &rest[..=close])?;
+                        rest = &rest[close + 1..];
+                        in_extended_command = false;
+                    }
+                    None => {
+                        push_line(&mut lines, rest)?;
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            let segment = rest.trim_start();
+            if segment.is_empty() {
+                break;
+            }
+
+            if let Some(after_open) = segment.strip_prefix('%') {
+                match after_open.find('%') {
+                    Some(close) => {
+                        let end = close + 2;
+                        push_line(&mut lines, &segment[..end])?;
+                        rest = &segment[end..];
+                    }
+                    None => {
+                        push_line(&mut lines, segment)?;
+                        in_extended_command = true;
+                        break;
+                    }
+                }
+            } else {
+                match segment.find('*') {
+                    Some(star) => {
+                        push_line(&mut lines, &segment[..=star])?;
+                        rest = &segment[star + 1..];
+                    }
+                    None => {
+                        push_line(&mut lines, segment)?;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     Ok(lines)
+}
+
+fn push_line<'a>(lines: &mut Vec<&'a str>, line: &'a str) -> Result<(), JsValue> {
+    lines.try_reserve(1).map_err(|_| {
+        JsValue::from_str(&format!(
+            "Gerber layer is too large to render: not enough memory for Gerber line index buffer ({})",
+            format_value_allocation::<&str>(lines.len().saturating_add(1))
+        ))
+    })?;
+    lines.push(line);
+    Ok(())
 }
 
 #[derive(Default)]
