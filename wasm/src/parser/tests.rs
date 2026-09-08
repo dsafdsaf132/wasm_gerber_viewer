@@ -2833,3 +2833,80 @@ G04 progress 50% done*D10*X000000Y000000D03*M02*",
     assert_eq!(layers.len(), 1);
     assert_eq!(layers[0].circles.x.len(), 1);
 }
+
+#[test]
+fn m00_stops_parsing_following_commands_like_m02() {
+    let on_next_line = parse_gerber(
+        "%FSLAX24Y24*%
+%MOMM*%
+%ADD10C,1.0*%
+D10*
+X000000Y000000D03*
+M00*
+X010000Y000000D03*",
+    )
+    .expect("flash before M00 should parse");
+    assert_eq!(on_next_line.len(), 1);
+    assert_eq!(on_next_line[0].circles.x.len(), 1);
+    assert_approx_eq(on_next_line[0].circles.x[0], 0.0);
+
+    let on_same_line = parse_gerber(
+        "%FSLAX24Y24*%
+%MOMM*%
+%ADD10C,1.0*%
+D10*X000000Y000000D03*M00*X010000Y000000D03*X020000Y000000D03*",
+    )
+    .expect("flash before M00 should parse");
+    assert_eq!(on_same_line.len(), 1);
+    assert_eq!(on_same_line[0].circles.x.len(), 1);
+    assert_approx_eq(on_same_line[0].circles.x[0], 0.0);
+}
+
+#[test]
+fn command_index_is_reserved_exactly_from_a_pre_count() {
+    // Multi-line macros end with a bare `%` command that carries no `*`, and
+    // the packed body adds thousands of commands to a single line, so neither
+    // the line count nor the `*` count matches the command count.
+    let mut data = String::from(
+        "%FSLAX24Y24*%
+%MOMM*%
+",
+    );
+    for index in 0..3 {
+        data.push_str(&format!(
+            "%AMDOT{index}*
+0 dot macro {index}*
+1,1,$1,0,0*
+%
+%ADD1{index}DOT{index},1.0*%
+"
+        ));
+    }
+    data.push_str("D10*");
+    for index in 0..500 {
+        data.push_str(&format!("X{:06}Y000000*D03*", index * 100));
+    }
+    data.push_str(
+        "M02*
+",
+    );
+
+    let commands = super::collect_commands(&data).expect("index should be allocated");
+
+    assert_eq!(commands.len(), split_command_count(&data));
+    assert_eq!(
+        commands.capacity(),
+        commands.len(),
+        "index buffer must be reserved exactly once from the pre-count"
+    );
+    assert!(commands.contains(&"%"));
+    assert!(commands.contains(&"M02*"));
+
+    let layers = parse_gerber(&data).expect("pre-counted file should still parse");
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].circles.x.len(), 500);
+}
+
+fn split_command_count(data: &str) -> usize {
+    super::split_commands(data).count()
+}
