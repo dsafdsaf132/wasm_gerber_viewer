@@ -2863,43 +2863,30 @@ D10*X000000Y000000D03*M00*X010000Y000000D03*X020000Y000000D03*",
 }
 
 #[test]
-fn command_index_is_reserved_exactly_from_a_pre_count() {
-    // Multi-line macros end with a bare `%` command that carries no `*`, and
-    // the packed body adds thousands of commands to a single line, so neither
-    // the line count nor the `*` count matches the command count.
-    let mut data = String::from(
-        "%FSLAX24Y24*%
-%MOMM*%
-",
-    );
+fn command_pre_count_matches_tokenizer_for_well_formed_input() {
+    // Multi-line macros end with a bare `%` command that carries no `*`, the
+    // packed body adds thousands of commands to a single line, and CRLF,
+    // indented terminators and whitespace-only lines must not disturb the
+    // count. The estimate must equal what the tokenizer really yields.
+    let mut data = String::from("%FSLAX24Y24*%\r\n%MOMM*%\r\n");
     for index in 0..3 {
         data.push_str(&format!(
-            "%AMDOT{index}*
-0 dot macro {index}*
-1,1,$1,0,0*
-%
-%ADD1{index}DOT{index},1.0*%
-"
+            "%AMDOT{index}*\r\n0 dot macro {index}*\r\n\r\n    \r\n1,1,$1,0,0*\r\n  %\r\n%ADD1{index}DOT{index},1.0*%\r\n"
         ));
     }
-    data.push_str("D10*");
+    data.push_str("G04 packed body*D10*");
     for index in 0..500 {
         data.push_str(&format!("X{:06}Y000000*D03*", index * 100));
     }
-    data.push_str(
-        "M02*
-",
-    );
+    data.push_str("M02*\n");
+
+    let tokenizer_count = super::split_commands(&data).count();
+    assert_eq!(super::count_commands(&data), tokenizer_count);
 
     let commands = super::collect_commands(&data).expect("index should be allocated");
-
-    assert_eq!(commands.len(), split_command_count(&data));
-    assert_eq!(
-        commands.capacity(),
-        commands.len(),
-        "index buffer must be reserved exactly once from the pre-count"
-    );
-    assert!(commands.contains(&"%"));
+    assert_eq!(commands.len(), tokenizer_count);
+    // The indented terminator line is yielded raw; `parse_command` trims it.
+    assert!(commands.iter().any(|command| command.trim() == "%"));
     assert!(commands.contains(&"M02*"));
 
     let layers = parse_gerber(&data).expect("pre-counted file should still parse");
@@ -2907,6 +2894,66 @@ fn command_index_is_reserved_exactly_from_a_pre_count() {
     assert_eq!(layers[0].circles.x.len(), 500);
 }
 
-fn split_command_count(data: &str) -> usize {
-    super::split_commands(data).count()
+#[test]
+fn command_pre_count_never_underestimates_well_formed_input() {
+    // A single-line macro with several primitives holds several `*` but is one
+    // command, so the estimate may exceed the real count; it must never fall
+    // short for well-formed input.
+    let inline_macro = "%FSLAX24Y24*%\n%MOMM*%\n%AMINLINE*1,1,$1,0,0*20,1,0.1,0,0,1,0,0*%\n%ADD10INLINE,1.0*%\nD10*X000000Y000000D03*M02*\n";
+    assert!(super::count_commands(inline_macro) >= super::split_commands(inline_macro).count());
+
+    for data in [
+        "%FSLAX24Y24*%\n%MOMM*%\n%ADD10C,1.0*%\nD10*\nX000000Y000000D03*\nM02",
+        "%FSLAX24Y24*%\n%MOMM*%\n%ADD10C,1.0*%\nD10*X000000Y000000D03*M02*",
+        "%FSLAX24Y24*%\n%MOMM*%\n%AMDOT*\n1,1,$1,0,0*\n%",
+        "",
+    ] {
+        assert_eq!(
+            super::count_commands(data),
+            super::split_commands(data).count(),
+            "count mismatch for {data:?}"
+        );
+    }
+}
+
+#[test]
+fn whitespace_only_lines_inside_extended_commands_are_not_yielded() {
+    let commands: Vec<&str> =
+        super::split_commands("%AMDOT*\r\n1,1,$1,0,0*\r\n    \r\n\t\r\n\r\n%\r\nD10*\r\n")
+            .collect();
+
+    // Commands outside extended blocks end at `*`; the opening line and raw
+    // lines inside a block keep their line ending, which `parse_command` trims.
+    assert_eq!(
+        commands,
+        vec!["%AMDOT*\r", "1,1,$1,0,0*\r", "%", "D10*"],
+        "whitespace-only lines must not become commands"
+    );
+}
+
+#[test]
+fn command_index_fallback_absorbs_under_counted_malformed_input() {
+    // An empty `%%` extended command is a command without `*` that is not a
+    // bare `%` line, so the single-pass estimate misses it. The index must
+    // still grow and the file must still parse.
+    let data = "\
+%FSLAX24Y24*%
+%MOMM*%
+%%
+%ADD10C,1.0*%
+%%
+D10*X000000Y000000D03*X010000Y000000D03*M02*";
+
+    let tokenizer_count = super::split_commands(data).count();
+    assert!(
+        super::count_commands(data) < tokenizer_count,
+        "test input must exercise the fallback growth path"
+    );
+
+    let commands = super::collect_commands(data).expect("fallback growth should succeed");
+    assert_eq!(commands.len(), tokenizer_count);
+
+    let layers = parse_gerber(data).expect("malformed empty extended commands are ignored");
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].circles.x.len(), 2);
 }

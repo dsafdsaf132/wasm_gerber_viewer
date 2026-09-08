@@ -70,7 +70,8 @@ impl<'a> Iterator for CommandSplitter<'a> {
             if self.in_extended_command {
                 // Inside a multi-line `%...%` block: yield the raw text up to and
                 // including the closing `%`, then keep scanning after it.
-                if self.rest.is_empty() {
+                // Whitespace-only lines carry nothing and are not yielded.
+                if self.rest.trim().is_empty() {
                     self.rest = self.lines.next()?;
                     continue;
                 }
@@ -120,14 +121,67 @@ impl<'a> Iterator for CommandSplitter<'a> {
     }
 }
 
-/// Index every command of the file, reserving the index buffer exactly once.
+/// Estimate how many commands `split_commands` will yield, in a single pass
+/// over the bytes.
 ///
-/// The command count comes from a first pass of the same splitter, so the
-/// reservation is exact even for files that pack the whole body on one line or
-/// that contain many multi-line aperture macros (whose closing `%` line is a
-/// command without a `*`).
+/// This mirrors the splitter's rules without running it: every `*` ends one
+/// command, and a line holding nothing but `%` (the terminator of a multi-line
+/// extended command such as an aperture macro) is one more command that has no
+/// `*`. A final unterminated command is counted as well. For well-formed input
+/// the estimate equals the real count; it may exceed it when a raw line inside
+/// an extended command holds several `*` (harmless over-reservation), and it
+/// falls short only for malformed input such as an empty `%%` command or a
+/// macro body line without `*`, which `push_command` absorbs.
+fn count_commands(data: &str) -> usize {
+    let mut count = 0usize;
+    let mut at_line_start = true;
+    let mut percent_only_line = false;
+    let mut last_significant = None;
+
+    for byte in data.bytes() {
+        match byte {
+            b'*' => {
+                count += 1;
+                percent_only_line = false;
+                at_line_start = false;
+            }
+            b'\n' => {
+                if percent_only_line {
+                    count += 1;
+                }
+                percent_only_line = false;
+                at_line_start = true;
+                continue;
+            }
+            b'%' => {
+                percent_only_line = at_line_start;
+                at_line_start = false;
+            }
+            b' ' | b'\t' | b'\r' => continue,
+            _ => {
+                percent_only_line = false;
+                at_line_start = false;
+            }
+        }
+        // Only `*`, `%` and command text count as significant; line breaks and
+        // other whitespace do not decide whether a trailing command is open.
+        last_significant = Some(byte);
+    }
+
+    if percent_only_line {
+        count += 1;
+    } else if matches!(last_significant, Some(byte) if byte != b'*' && byte != b'%') {
+        // Trailing command without its `*` terminator.
+        count += 1;
+    }
+
+    count
+}
+
+/// Index every command of the file, reserving the index buffer once up front
+/// from the single-pass estimate of `count_commands`.
 fn collect_commands(data: &str) -> Result<Vec<&str>, JsValue> {
-    let command_count = split_commands(data).count();
+    let command_count = count_commands(data);
     let mut commands = Vec::new();
     try_reserve_exact(&mut commands, command_count, "Gerber command index buffer")?;
 
@@ -139,10 +193,11 @@ fn collect_commands(data: &str) -> Result<Vec<&str>, JsValue> {
 }
 
 fn push_command<'a>(commands: &mut Vec<&'a str>, command: &'a str) -> Result<(), JsValue> {
-    // `collect_commands` already reserved room for every command, so this only
-    // keeps the push fallible instead of panicking should the two passes ever
-    // disagree.
-    commands.try_reserve_exact(1).map_err(|_| {
+    // For well-formed input the up-front reservation already holds every
+    // command and this never allocates. It only grows for malformed input that
+    // `count_commands` under-estimates, using amortized growth so the total
+    // copying stays linear rather than copying the whole index per command.
+    commands.try_reserve(1).map_err(|_| {
         JsValue::from_str(&format!(
             "Gerber layer is too large to render: not enough memory for Gerber command index buffer ({})",
             format_value_allocation::<&str>(commands.len().saturating_add(1))
