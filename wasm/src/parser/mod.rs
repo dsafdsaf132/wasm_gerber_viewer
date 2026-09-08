@@ -40,12 +40,171 @@ pub struct ParsedGerberLayer {
     pub interaction_layer: Option<InteractionLayer>,
 }
 
-fn collect_lines(data: &str) -> Result<Vec<&str>, JsValue> {
-    let line_count = data.bytes().filter(|byte| *byte == b'\n').count() + 1;
-    let mut lines = Vec::new();
-    try_reserve_exact(&mut lines, line_count, "Gerber line index buffer")?;
-    lines.extend(data.split('\n'));
-    Ok(lines)
+/// Iterator over the commands of a Gerber file.
+///
+/// The Gerber format delimits commands with `*`; line breaks carry no meaning,
+/// so a file may put every command on its own line or pack thousands of them
+/// onto a single line. Each item is one `*`-terminated command. Extended
+/// commands (`%...%`) are yielded as a unit, and the body lines of a multi-line
+/// extended command such as an aperture macro are passed through untouched so
+/// `parse_command` can accumulate them exactly as before.
+struct CommandSplitter<'a> {
+    lines: std::str::Split<'a, char>,
+    rest: &'a str,
+    in_extended_command: bool,
+}
+
+fn split_commands(data: &str) -> CommandSplitter<'_> {
+    CommandSplitter {
+        lines: data.split('\n'),
+        rest: "",
+        in_extended_command: false,
+    }
+}
+
+impl<'a> Iterator for CommandSplitter<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<&'a str> {
+        loop {
+            if self.in_extended_command {
+                // Inside a multi-line `%...%` block: yield the raw text up to and
+                // including the closing `%`, then keep scanning after it.
+                // Whitespace-only lines carry nothing and are not yielded.
+                if self.rest.trim().is_empty() {
+                    self.rest = self.lines.next()?;
+                    continue;
+                }
+                return Some(match self.rest.find('%') {
+                    Some(close) => {
+                        let command = &self.rest[..=close];
+                        self.rest = &self.rest[close + 1..];
+                        self.in_extended_command = false;
+                        command
+                    }
+                    None => take(&mut self.rest),
+                });
+            }
+
+            let segment = self.rest.trim_start();
+            if segment.is_empty() {
+                self.rest = self.lines.next()?;
+                continue;
+            }
+
+            if let Some(after_open) = segment.strip_prefix('%') {
+                return Some(match after_open.find('%') {
+                    Some(close) => {
+                        let end = close + 2;
+                        self.rest = &segment[end..];
+                        &segment[..end]
+                    }
+                    None => {
+                        self.rest = "";
+                        self.in_extended_command = true;
+                        segment
+                    }
+                });
+            }
+
+            return Some(match segment.find('*') {
+                Some(star) => {
+                    self.rest = &segment[star + 1..];
+                    &segment[..=star]
+                }
+                None => {
+                    self.rest = "";
+                    segment
+                }
+            });
+        }
+    }
+}
+
+/// Estimate how many commands `split_commands` will yield, in a single pass
+/// over the bytes.
+///
+/// This mirrors the splitter's rules without running it: every `*` ends one
+/// command, and a line holding nothing but `%` (the terminator of a multi-line
+/// extended command such as an aperture macro) is one more command that has no
+/// `*`. A final unterminated command is counted as well. For well-formed input
+/// the estimate equals the real count; it may exceed it when a raw line inside
+/// an extended command holds several `*` (harmless over-reservation), and it
+/// falls short only for malformed input such as an empty `%%` command or a
+/// macro body line without `*`, which `push_command` absorbs.
+fn count_commands(data: &str) -> usize {
+    let mut count = 0usize;
+    let mut at_line_start = true;
+    let mut percent_only_line = false;
+    let mut last_significant = None;
+
+    for byte in data.bytes() {
+        match byte {
+            b'*' => {
+                count += 1;
+                percent_only_line = false;
+                at_line_start = false;
+            }
+            b'\n' => {
+                if percent_only_line {
+                    count += 1;
+                }
+                percent_only_line = false;
+                at_line_start = true;
+                continue;
+            }
+            b'%' => {
+                percent_only_line = at_line_start;
+                at_line_start = false;
+            }
+            b' ' | b'\t' | b'\r' => continue,
+            _ => {
+                percent_only_line = false;
+                at_line_start = false;
+            }
+        }
+        // Only `*`, `%` and command text count as significant; line breaks and
+        // other whitespace do not decide whether a trailing command is open.
+        last_significant = Some(byte);
+    }
+
+    if percent_only_line {
+        count += 1;
+    } else if matches!(last_significant, Some(byte) if byte != b'*' && byte != b'%') {
+        // Trailing command without its `*` terminator.
+        count += 1;
+    }
+
+    count
+}
+
+/// Index every command of the file, reserving the index buffer once up front
+/// from the single-pass estimate of `count_commands`.
+fn collect_commands(data: &str) -> Result<Vec<&str>, JsValue> {
+    let command_count = count_commands(data);
+    let mut commands = Vec::new();
+    try_reserve_exact(&mut commands, command_count, "Gerber command index buffer")?;
+
+    for command in split_commands(data) {
+        push_command(&mut commands, command)?;
+    }
+
+    Ok(commands)
+}
+
+fn push_command<'a>(commands: &mut Vec<&'a str>, command: &'a str) -> Result<(), JsValue> {
+    // For well-formed input the up-front reservation already holds every
+    // command and this never allocates. It only grows for malformed input that
+    // `count_commands` under-estimates, using amortized growth so the total
+    // copying stays linear rather than copying the whole index per command.
+    commands.try_reserve(1).map_err(|_| {
+        JsValue::from_str(&format!(
+            "Gerber layer is too large to render: not enough memory for Gerber command index buffer ({})",
+            format_value_allocation::<&str>(commands.len().saturating_add(1))
+        ))
+    })?;
+    commands.push(command);
+    Ok(())
 }
 
 #[derive(Default)]
@@ -863,7 +1022,7 @@ impl GerberParser {
 
     /// Parse Gerber file content and return GerberData batches in object-stream polarity order.
     pub fn parse(&mut self, data: &str) -> Result<Vec<GerberData>, JsValue> {
-        let lines = collect_lines(data)?;
+        let lines = collect_commands(data)?;
         let length = lines.len();
         let mut i = 0;
 
@@ -875,7 +1034,9 @@ impl GerberParser {
                 continue;
             }
 
-            if line_ref.starts_with("M02") {
+            // M02 ends the file. The deprecated M00 (program stop) has the same
+            // effect and is still emitted by some CAM tools such as Zuken CR-5000.
+            if line_ref.starts_with("M02") || line_ref.starts_with("M00") {
                 break;
             } else if line_ref.starts_with('%') {
                 parse_command(

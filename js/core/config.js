@@ -39,6 +39,7 @@ export const GERBER_FILE_EXTENSIONS = new Set([
   ".outline",
   ".pastebot",
   ".pastetop",
+  ".phd",
   ".pho",
   ".plb",
   ".plc",

@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   getLayerSourceKind,
+  isSupportedGerberPath,
+  isSupportedLayerPath,
 } from "../../../js/loading/file-utils.js";
 import {
   fetchRemoteFile,
@@ -834,3 +836,13 @@ function makeParsedReuseWasmModule() {
     },
   };
 }
+
+test("viewer accepts Zuken CR-5000 .phd photo data as Gerber", () => {
+  assert.equal(isSupportedGerberPath("metal-mask-top.phd"), true);
+  assert.equal(isSupportedGerberPath("METAL-MASK-TOP.PHD"), true);
+  assert.equal(isSupportedLayerPath("archive/metal-mask-top.phd"), true);
+  assert.equal(getLayerSourceKind("metal-mask-top.phd", GERBER_CONTENT), "gerber");
+  // Companion report (.phl) and aperture table (.ptb) are not layer sources.
+  assert.equal(isSupportedLayerPath("metal-mask-top.phl"), false);
+  assert.equal(isSupportedLayerPath("metal-mask-top.ptb"), false);
+});

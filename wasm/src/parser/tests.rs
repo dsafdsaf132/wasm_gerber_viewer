@@ -2717,3 +2717,243 @@ fn multiline_outline_macro_instantiates_geometry() {
 
     assert!(!primitives.is_empty());
 }
+
+#[test]
+fn multiple_commands_on_one_line_parse_like_one_command_per_line() {
+    let per_line = parse_gerber(
+        "\
+%FSLAX24Y24*%
+%MOMM*%
+%ADD10C,1.0*%
+D10*
+X000000Y000000D03*
+X010000Y000000D03*
+X020000Y010000D03*
+M02*",
+    )
+    .expect("one command per line should parse");
+    let packed = parse_gerber(
+        "\
+%FSLAX24Y24*%
+%MOMM*%
+%ADD10C,1.0*%
+D10*X000000Y000000D03*X010000Y000000D03*X020000Y010000D03*M02*",
+    )
+    .expect("several commands on one line should parse");
+
+    assert_eq!(packed.len(), per_line.len());
+    assert_eq!(packed[0].circles.x.len(), 3);
+    assert_eq!(packed[0].circles.x, per_line[0].circles.x);
+    assert_eq!(packed[0].circles.y, per_line[0].circles.y);
+    assert_eq!(packed[0].circles.radius, per_line[0].circles.radius);
+}
+
+#[test]
+fn extended_commands_inline_with_graphic_commands_are_isolated() {
+    let layers = parse_gerber(
+        "%FSLAX24Y24*%%MOMM*%%ADD10C,1.0*%D10*X000000Y000000D03*%LPC*%X010000Y000000D03*M02*",
+    )
+    .expect("whole file on a single line should parse");
+
+    assert_eq!(layers.len(), 2, "dark and clear polarity layers expected");
+    assert_eq!(layers[0].circles.x.len(), 1);
+    assert!(has_circle_at(&layers[0].circles, 0.0, 0.0, 0.5));
+    assert_eq!(layers[1].circles.x.len(), 1);
+    assert!(has_circle_at(&layers[1].circles, 1.0, 0.0, 0.5));
+}
+
+#[test]
+fn multi_line_aperture_macro_body_survives_packed_graphic_commands() {
+    let layers = parse_gerber(
+        "\
+%FSLAX24Y24*%
+%MOMM*%
+%AMDOT*
+1,1,$1,0,0*
+%
+%ADD11DOT,2.0*%
+D11*X000000Y000000D03*X030000Y000000D03*M02*",
+    )
+    .expect("macro aperture followed by packed flashes should parse");
+
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].circles.x.len(), 2);
+    assert!(has_circle_at(&layers[0].circles, 0.0, 0.0, 1.0));
+    assert!(has_circle_at(&layers[0].circles, 3.0, 0.0, 1.0));
+}
+
+#[test]
+fn packed_body_with_empty_commands_and_m00_terminator_parses() {
+    // Mirrors CAM output that writes the header one command per line and the
+    // entire body on a single line, including stray empty `*` commands and a
+    // deprecated M00 end-of-program.
+    let layers = parse_gerber(
+        "\
+%FSLAX44Y44*%
+%MOMM*%
+%ADD80C,0.37000*%
+*D80*X00617500Y00864500*D03*Y00856500*D03*X00609500Y00864500*D03**X0Y0D02*M00*",
+    )
+    .expect("packed body with empty commands should parse");
+
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].circles.x.len(), 3);
+    assert!(has_circle_at(&layers[0].circles, 61.75, 86.45, 0.185));
+    assert!(has_circle_at(&layers[0].circles, 61.75, 85.65, 0.185));
+    assert!(has_circle_at(&layers[0].circles, 60.95, 86.45, 0.185));
+}
+
+#[test]
+fn m02_stops_parsing_commands_that_follow_on_the_same_line() {
+    let layers = parse_gerber(
+        "\
+%FSLAX24Y24*%
+%MOMM*%
+%ADD10C,1.0*%
+D10*X000000Y000000D03*M02*X010000Y000000D03*",
+    )
+    .expect("flash before M02 should parse");
+
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].circles.x.len(), 1);
+    assert_approx_eq(layers[0].circles.x[0], 0.0);
+}
+
+#[test]
+fn comments_containing_percent_signs_do_not_open_extended_commands() {
+    let layers = parse_gerber(
+        "\
+%FSLAX24Y24*%
+%MOMM*%
+%ADD10C,1.0*%
+G04 progress 50% done*D10*X000000Y000000D03*M02*",
+    )
+    .expect("comment with a percent sign should be ignored");
+
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].circles.x.len(), 1);
+}
+
+#[test]
+fn m00_stops_parsing_following_commands_like_m02() {
+    let on_next_line = parse_gerber(
+        "%FSLAX24Y24*%
+%MOMM*%
+%ADD10C,1.0*%
+D10*
+X000000Y000000D03*
+M00*
+X010000Y000000D03*",
+    )
+    .expect("flash before M00 should parse");
+    assert_eq!(on_next_line.len(), 1);
+    assert_eq!(on_next_line[0].circles.x.len(), 1);
+    assert_approx_eq(on_next_line[0].circles.x[0], 0.0);
+
+    let on_same_line = parse_gerber(
+        "%FSLAX24Y24*%
+%MOMM*%
+%ADD10C,1.0*%
+D10*X000000Y000000D03*M00*X010000Y000000D03*X020000Y000000D03*",
+    )
+    .expect("flash before M00 should parse");
+    assert_eq!(on_same_line.len(), 1);
+    assert_eq!(on_same_line[0].circles.x.len(), 1);
+    assert_approx_eq(on_same_line[0].circles.x[0], 0.0);
+}
+
+#[test]
+fn command_pre_count_matches_tokenizer_for_well_formed_input() {
+    // Multi-line macros end with a bare `%` command that carries no `*`, the
+    // packed body adds thousands of commands to a single line, and CRLF,
+    // indented terminators and whitespace-only lines must not disturb the
+    // count. The estimate must equal what the tokenizer really yields.
+    let mut data = String::from("%FSLAX24Y24*%\r\n%MOMM*%\r\n");
+    for index in 0..3 {
+        data.push_str(&format!(
+            "%AMDOT{index}*\r\n0 dot macro {index}*\r\n\r\n    \r\n1,1,$1,0,0*\r\n  %\r\n%ADD1{index}DOT{index},1.0*%\r\n"
+        ));
+    }
+    data.push_str("G04 packed body*D10*");
+    for index in 0..500 {
+        data.push_str(&format!("X{:06}Y000000*D03*", index * 100));
+    }
+    data.push_str("M02*\n");
+
+    let tokenizer_count = super::split_commands(&data).count();
+    assert_eq!(super::count_commands(&data), tokenizer_count);
+
+    let commands = super::collect_commands(&data).expect("index should be allocated");
+    assert_eq!(commands.len(), tokenizer_count);
+    // The indented terminator line is yielded raw; `parse_command` trims it.
+    assert!(commands.iter().any(|command| command.trim() == "%"));
+    assert!(commands.contains(&"M02*"));
+
+    let layers = parse_gerber(&data).expect("pre-counted file should still parse");
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].circles.x.len(), 500);
+}
+
+#[test]
+fn command_pre_count_never_underestimates_well_formed_input() {
+    // A single-line macro with several primitives holds several `*` but is one
+    // command, so the estimate may exceed the real count; it must never fall
+    // short for well-formed input.
+    let inline_macro = "%FSLAX24Y24*%\n%MOMM*%\n%AMINLINE*1,1,$1,0,0*20,1,0.1,0,0,1,0,0*%\n%ADD10INLINE,1.0*%\nD10*X000000Y000000D03*M02*\n";
+    assert!(super::count_commands(inline_macro) >= super::split_commands(inline_macro).count());
+
+    for data in [
+        "%FSLAX24Y24*%\n%MOMM*%\n%ADD10C,1.0*%\nD10*\nX000000Y000000D03*\nM02",
+        "%FSLAX24Y24*%\n%MOMM*%\n%ADD10C,1.0*%\nD10*X000000Y000000D03*M02*",
+        "%FSLAX24Y24*%\n%MOMM*%\n%AMDOT*\n1,1,$1,0,0*\n%",
+        "",
+    ] {
+        assert_eq!(
+            super::count_commands(data),
+            super::split_commands(data).count(),
+            "count mismatch for {data:?}"
+        );
+    }
+}
+
+#[test]
+fn whitespace_only_lines_inside_extended_commands_are_not_yielded() {
+    let commands: Vec<&str> =
+        super::split_commands("%AMDOT*\r\n1,1,$1,0,0*\r\n    \r\n\t\r\n\r\n%\r\nD10*\r\n")
+            .collect();
+
+    // Commands outside extended blocks end at `*`; the opening line and raw
+    // lines inside a block keep their line ending, which `parse_command` trims.
+    assert_eq!(
+        commands,
+        vec!["%AMDOT*\r", "1,1,$1,0,0*\r", "%", "D10*"],
+        "whitespace-only lines must not become commands"
+    );
+}
+
+#[test]
+fn command_index_fallback_absorbs_under_counted_malformed_input() {
+    // An empty `%%` extended command is a command without `*` that is not a
+    // bare `%` line, so the single-pass estimate misses it. The index must
+    // still grow and the file must still parse.
+    let data = "\
+%FSLAX24Y24*%
+%MOMM*%
+%%
+%ADD10C,1.0*%
+%%
+D10*X000000Y000000D03*X010000Y000000D03*M02*";
+
+    let tokenizer_count = super::split_commands(data).count();
+    assert!(
+        super::count_commands(data) < tokenizer_count,
+        "test input must exercise the fallback growth path"
+    );
+
+    let commands = super::collect_commands(data).expect("fallback growth should succeed");
+    assert_eq!(commands.len(), tokenizer_count);
+
+    let layers = parse_gerber(data).expect("malformed empty extended commands are ignored");
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].circles.x.len(), 2);
+}
