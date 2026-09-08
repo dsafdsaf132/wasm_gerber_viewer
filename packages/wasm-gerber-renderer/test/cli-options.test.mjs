@@ -1156,3 +1156,36 @@ test("CLI validates render strategy before rendering", async () => {
     /--render-strategy must be auto, full-frame, or stream\./,
   );
 });
+
+test(
+  "CLI default output infers .png without .phd generic extension",
+  { skip: !(hasNodeGles && existsSync(wasmBinaryPath)) },
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gerber-cli-phd-output-"));
+    const phdPath = join(directory, "metal-mask-top.phd");
+    const expectedOutputPath = join(directory, "metal-mask-top.png");
+    const unexpectedOutputPath = join(directory, "metal-mask-top.phd.png");
+    try {
+      await writeFile(
+        phdPath,
+        "%FSLAX24Y24*%\n%MOMM*%\n%ADD10C,2.000*%\nD10*\nX000000Y000000D03*\nM02*",
+        "utf8",
+      );
+      const { stdout, stderr } = await execFileAsync(process.execPath, [
+        cliPath,
+        phdPath,
+        "--width",
+        "96",
+        "--height",
+        "64",
+      ]);
+      assert.equal(stderr, "");
+      assert.match(stdout, /Rendered 1\/1 layer\(s\) to .*metal-mask-top\.png/);
+      assert.equal(existsSync(expectedOutputPath), true);
+      assert.equal(existsSync(unexpectedOutputPath), false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
+

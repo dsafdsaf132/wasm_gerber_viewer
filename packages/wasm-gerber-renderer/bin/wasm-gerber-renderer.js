@@ -59,7 +59,14 @@ AI guide: run \`gerber-renderer --skill\` for usage notes.
 `;
 
 const TAR_GZ_EXTENSIONS = [".tar.gz", ".tgz"];
-const GENERIC_GERBER_EXTENSIONS = [".art", ".gbr", ".gdo", ".ger", ".pho"];
+const GENERIC_GERBER_EXTENSIONS = [
+  ".art",
+  ".gbr",
+  ".gdo",
+  ".ger",
+  ".phd",
+  ".pho",
+];
 const SKILL_URL = new URL("../SKILL.md", import.meta.url);
 const CLI_LAYER_SELECTOR_PREFIX = "__wasmGerberRendererCliLayer:";
 const COMPOSITE_CONFIG_ROOT_FIELDS = new Set(["hiddenSources", "composites"]);
