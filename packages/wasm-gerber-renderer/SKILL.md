@@ -93,7 +93,7 @@ over-limit archives as fatal input errors; do not retry them.
 
 The CLI renders valid layers and skips invalid inputs such as non-Gerber files in archives. If every layer fails, it exits with an error.
 
-If a single input omits `--output`, generic Gerber extensions such as `.gbr`, `.ger`, `.art`, `.gdo`, and `.pho` are replaced with `.png`; layer-specific or unknown extensions keep the full filename and append `.png`.
+If a single input omits `--output`, generic Gerber extensions such as `.gbr`, `.ger`, `.art`, `.gdo`, `.phd`, and `.pho` are replaced with `.png`; layer-specific or unknown extensions keep the full filename and append `.png`.
 
 ## Node.js PNG
 

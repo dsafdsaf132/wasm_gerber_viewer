@@ -514,7 +514,7 @@ archive path는 4 KiB로 제한되며 malformed 또는 truncated archive는 렌�
 
 여러 input file을 제공하면 CLI는 실패한 layer마다 warning을 출력하고, 남은 layer를 계속 렌더링합니다. 모든 input이 실패하면 command는 error로 종료됩니다.
 
-Input이 하나이고 `--output`을 생략하면 CLI는 input 옆에 output을 생성합니다. `.gbr`, `.ger`, `.art`, `.gdo`, `.pho` 같은 일반 Gerber extension은 `.png`로 교체됩니다. Layer-specific 또는 unknown extension은 전체 filename을 유지하고 `.png`를 붙입니다.
+Input이 하나이고 `--output`을 생략하면 CLI는 input 옆에 output을 생성합니다. `.gbr`, `.ger`, `.art`, `.gdo`, `.phd`, `.pho` 같은 일반 Gerber extension은 `.png`로 교체됩니다. Layer-specific 또는 unknown extension은 전체 filename을 유지하고 `.png`를 붙입니다.
 
 ## 라이선스
 
